@@ -1,4 +1,3 @@
-// TEST_AIDER_DIFF
 package com.personal.futurescalculator
 
 import android.os.Bundle

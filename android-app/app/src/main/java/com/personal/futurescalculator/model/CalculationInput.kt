@@ -10,6 +10,11 @@ data class CalculationInput(
     val entryPrice: BigDecimal? = null,
     val exitPrice: BigDecimal? = null,
     val quantity: BigDecimal? = null,
-    val feeRatePercent: BigDecimal = BigDecimal("0.05"),
+    val openFeeRatePercent: BigDecimal = BigDecimal("0.05"),
+    val closeFeeRatePercent: BigDecimal = BigDecimal("0.05"),
+    val targetProfitAmount: BigDecimal? = null,
+    val targetRoiPercent: BigDecimal? = null,
+    val maxLossAmount: BigDecimal? = null,
+    val maxLossRoiPercent: BigDecimal? = null,
     val maintenanceMarginRatePercent: BigDecimal = BigDecimal("0.5")
 )

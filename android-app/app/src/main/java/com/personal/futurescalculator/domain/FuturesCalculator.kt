@@ -29,11 +29,11 @@ class FuturesCalculator {
         // 计算手续费
         val openFee = calculateOpenFee(calculatedInput)
         val closeFee = calculateCloseFee(calculatedInput)
-        val totalFee = openFee + closeFee
+        val totalFee = closeFee?.let { openFee + it }
         
         // 计算净盈亏
         val netPnl = if (grossPnl != null) {
-            grossPnl - totalFee
+            grossPnl - (totalFee ?: openFee)
         } else {
             null
         }
@@ -47,6 +47,11 @@ class FuturesCalculator {
         
         // 计算强平价
         val liquidationPrice = calculateLiquidationPrice(calculatedInput)
+
+        val targetProfitPriceByAmount = calculateTargetProfitPriceByAmount(calculatedInput)
+        val targetProfitPriceByRoi = calculateTargetProfitPriceByRoi(calculatedInput, requiredMargin)
+        val stopLossPriceByAmount = calculateStopLossPriceByAmount(calculatedInput)
+        val stopLossPriceByRoi = calculateStopLossPriceByRoi(calculatedInput, requiredMargin)
         
         // 计算到强平价距离
         val distanceToLiquidationPercent = calculateDistanceToLiquidation(calculatedInput, liquidationPrice)
@@ -61,6 +66,10 @@ class FuturesCalculator {
             totalFee = totalFee,
             netPnl = netPnl,
             roiPercent = roiPercent,
+            targetProfitPriceByAmount = targetProfitPriceByAmount,
+            targetProfitPriceByRoi = targetProfitPriceByRoi,
+            stopLossPriceByAmount = stopLossPriceByAmount,
+            stopLossPriceByRoi = stopLossPriceByRoi,
             liquidationPrice = liquidationPrice,
             distanceToLiquidationPercent = distanceToLiquidationPercent
         )
@@ -93,7 +102,23 @@ class FuturesCalculator {
         }
         
         // 手续费率必须大于等于0
-        if (input.feeRatePercent < BigDecimal.ZERO) {
+        if (input.openFeeRatePercent < BigDecimal.ZERO || input.closeFeeRatePercent < BigDecimal.ZERO) {
+            return false
+        }
+
+        if (input.targetProfitAmount != null && input.targetProfitAmount < BigDecimal.ZERO) {
+            return false
+        }
+
+        if (input.targetRoiPercent != null && input.targetRoiPercent < BigDecimal.ZERO) {
+            return false
+        }
+
+        if (input.maxLossAmount != null && input.maxLossAmount < BigDecimal.ZERO) {
+            return false
+        }
+
+        if (input.maxLossRoiPercent != null && input.maxLossRoiPercent < BigDecimal.ZERO) {
             return false
         }
         
@@ -104,12 +129,12 @@ class FuturesCalculator {
         
         // 检查是否至少有一个可以计算仓位价值的组合
         val hasPositionValueInputs = (input.entryPrice != null && 
-            (input.margin != null || input.quantity != null || input.leverage != null))
+            (input.margin != null || input.quantity != null))
         
         if (!hasPositionValueInputs) {
             // 如果没有足够的输入来计算仓位价值，但有平仓价，也可以计算盈亏
             if (input.exitPrice != null && input.entryPrice != null && 
-                (input.quantity != null || input.margin != null || input.leverage != null)) {
+                (input.quantity != null || input.margin != null)) {
                 return true
             }
             return false
@@ -195,16 +220,72 @@ class FuturesCalculator {
             return BigDecimal.ZERO
         }
         
-        val feeRate = input.feeRatePercent.divide(BigDecimal(100), DIVIDE_SCALE, RoundingMode.HALF_UP)
+        val feeRate = input.openFeeRatePercent.divide(BigDecimal(100), DIVIDE_SCALE, RoundingMode.HALF_UP)
         return input.entryPrice!! * input.quantity!! * feeRate
     }
     
-    private fun calculateCloseFee(input: CalculationInput): BigDecimal {
+    private fun calculateCloseFee(input: CalculationInput): BigDecimal? {
         if (input.exitPrice == null || input.quantity == null) {
-            return BigDecimal.ZERO
+            return null
         }
         
-        val feeRate = input.feeRatePercent.divide(BigDecimal(100), DIVIDE_SCALE, RoundingMode.HALF_UP)
+        val feeRate = input.closeFeeRatePercent.divide(BigDecimal(100), DIVIDE_SCALE, RoundingMode.HALF_UP)
         return input.exitPrice!! * input.quantity!! * feeRate
+    }
+
+    private fun calculateTargetProfitPriceByAmount(input: CalculationInput): BigDecimal? {
+        val amount = input.targetProfitAmount ?: return null
+        return calculateExitPriceForNetPnl(input, amount)
+    }
+
+    private fun calculateTargetProfitPriceByRoi(
+        input: CalculationInput,
+        requiredMargin: BigDecimal
+    ): BigDecimal? {
+        val roiPercent = input.targetRoiPercent ?: return null
+        val targetNetPnl = requiredMargin
+            .multiply(roiPercent)
+            .divide(BigDecimal(100), DIVIDE_SCALE, RoundingMode.HALF_UP)
+        return calculateExitPriceForNetPnl(input, targetNetPnl)
+    }
+
+    private fun calculateStopLossPriceByAmount(input: CalculationInput): BigDecimal? {
+        val amount = input.maxLossAmount ?: return null
+        return calculateExitPriceForNetPnl(input, amount.negate())
+    }
+
+    private fun calculateStopLossPriceByRoi(
+        input: CalculationInput,
+        requiredMargin: BigDecimal
+    ): BigDecimal? {
+        val roiPercent = input.maxLossRoiPercent ?: return null
+        val targetNetPnl = requiredMargin
+            .multiply(roiPercent)
+            .divide(BigDecimal(100), DIVIDE_SCALE, RoundingMode.HALF_UP)
+            .negate()
+        return calculateExitPriceForNetPnl(input, targetNetPnl)
+    }
+
+    private fun calculateExitPriceForNetPnl(input: CalculationInput, targetNetPnl: BigDecimal): BigDecimal? {
+        val entryPrice = input.entryPrice ?: return null
+        val quantity = input.quantity ?: return null
+        if (quantity <= BigDecimal.ZERO) return null
+
+        val openFeeRate = input.openFeeRatePercent.divide(BigDecimal(100), DIVIDE_SCALE, RoundingMode.HALF_UP)
+        val closeFeeRate = input.closeFeeRatePercent.divide(BigDecimal(100), DIVIDE_SCALE, RoundingMode.HALF_UP)
+        val targetPerQuantity = targetNetPnl.divide(quantity, DIVIDE_SCALE, RoundingMode.HALF_UP)
+
+        val price = if (input.side == PositionSide.Long) {
+            val denominator = BigDecimal.ONE - closeFeeRate
+            if (denominator <= BigDecimal.ZERO) return null
+            val numerator = targetPerQuantity + entryPrice * (BigDecimal.ONE + openFeeRate)
+            numerator.divide(denominator, DIVIDE_SCALE, RoundingMode.HALF_UP)
+        } else {
+            val denominator = BigDecimal.ONE + closeFeeRate
+            val numerator = entryPrice * (BigDecimal.ONE - openFeeRate) - targetPerQuantity
+            numerator.divide(denominator, DIVIDE_SCALE, RoundingMode.HALF_UP)
+        }
+
+        return price.takeIf { it > BigDecimal.ZERO }
     }
 }

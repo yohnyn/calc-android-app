@@ -33,6 +33,7 @@ class CalculatorViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(input = input)
             calculateResult()
+            calculateComparisonResults()
         }
     }
     
@@ -56,10 +57,8 @@ class CalculatorViewModel : ViewModel() {
         viewModelScope.launch {
             val currentItems = _uiState.value.comparisonItems
             if (index >= 0 && index < currentItems.size) {
-                _uiState.value = _uiState.value.copy(comparisonItems = currentItems.filterIndexed {
-                    itemIndex, _ ->
-
-        itemIndex != index
+                _uiState.value = _uiState.value.copy(comparisonItems = currentItems.filterIndexed { itemIndex, _ ->
+                    itemIndex != index
                 })
                 calculateComparisonResults()
             }

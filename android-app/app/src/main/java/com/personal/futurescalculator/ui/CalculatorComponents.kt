@@ -1,16 +1,39 @@
 package com.personal.futurescalculator.ui
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
-import com.personal.futurescalculator.model.PositionSide
 import com.personal.futurescalculator.model.MarginMode
+import com.personal.futurescalculator.model.PositionSide
 import java.math.BigDecimal
 
 @Composable
@@ -19,46 +42,15 @@ fun PositionSideSelector(
     onSideChange: (PositionSide) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Button(
-            onClick = { onSideChange(PositionSide.Long) },
-            modifier = Modifier.weight(1f),
-            colors = if (selectedSide == PositionSide.Long) {
-                ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                )
-            } else {
-                ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                )
-            }
-        ) {
-            Text("做多")
-        }
-        Button(
-            onClick = { onSideChange(PositionSide.Short) },
-            modifier = Modifier.weight(1f),
-            colors = if (selectedSide == PositionSide.Short) {
-                ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                )
-            } else {
-                ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                )
-            }
-        ) {
-            Text("做空")
-        }
-    }
+    TwoOptionSelector(
+        firstText = "做多",
+        secondText = "做空",
+        firstSelected = selectedSide == PositionSide.Long,
+        secondSelected = selectedSide == PositionSide.Short,
+        onFirstClick = { onSideChange(PositionSide.Long) },
+        onSecondClick = { onSideChange(PositionSide.Short) },
+        modifier = modifier
+    )
 }
 
 @Composable
@@ -67,45 +59,79 @@ fun MarginModeSelector(
     onModeChange: (MarginMode) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
+    TwoOptionSelector(
+        firstText = "全仓",
+        secondText = "逐仓",
+        firstSelected = selectedMode == MarginMode.Cross,
+        secondSelected = selectedMode == MarginMode.Isolated,
+        onFirstClick = { onModeChange(MarginMode.Cross) },
+        onSecondClick = { onModeChange(MarginMode.Isolated) },
+        modifier = modifier
+    )
+}
+
+@Composable
+private fun TwoOptionSelector(
+    firstText: String,
+    secondText: String,
+    firstSelected: Boolean,
+    secondSelected: Boolean,
+    onFirstClick: () -> Unit,
+    onSecondClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f)
     ) {
-        Button(
-            onClick = { onModeChange(MarginMode.Cross) },
-            modifier = Modifier.weight(1f),
-            colors = if (selectedMode == MarginMode.Cross) {
-                ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                )
-            } else {
-                ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                )
-            }
+        Row(
+            modifier = Modifier.padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text("全仓")
+            SelectorButton(
+                text = firstText,
+                selected = firstSelected,
+                onClick = onFirstClick,
+                modifier = Modifier.weight(1f)
+            )
+            SelectorButton(
+                text = secondText,
+                selected = secondSelected,
+                onClick = onSecondClick,
+                modifier = Modifier.weight(1f)
+            )
         }
-        Button(
-            onClick = { onModeChange(MarginMode.Isolated) },
-            modifier = Modifier.weight(1f),
-            colors = if (selectedMode == MarginMode.Isolated) {
-                ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                )
-            } else {
-                ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                )
-            }
-        ) {
-            Text("逐仓")
-        }
+    }
+}
+
+@Composable
+private fun SelectorButton(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = if (selected) {
+        ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary
+        )
+    } else {
+        ButtonDefaults.buttonColors(
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+
+    Button(
+        onClick = onClick,
+        modifier = modifier.heightIn(min = 42.dp),
+        shape = MaterialTheme.shapes.small,
+        colors = colors,
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
+    ) {
+        Text(text = text, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
     }
 }
 
@@ -115,33 +141,43 @@ fun LeverageSelector(
     onLeverageChange: (BigDecimal) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val leverageOptions = listOf("1x", "2x", "3x", "5x", "10x", "20x", "50x", "100x")
-    val selectedLeverage = leverageOptions.find { it.replace("x", "") == leverage.toString() } ?: "10x"
-    
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
+    val leverageValue = leverage.toFloat().coerceIn(1f, 125f)
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        leverageOptions.forEach { option ->
-            val selected = option == selectedLeverage
-            Button(
-                onClick = { onLeverageChange(BigDecimal(option.replace("x", ""))) },
-                modifier = Modifier.weight(1f),
-                colors = if (selected) {
-                    ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    )
-                } else {
-                    ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            ) {
-                Text(option)
-            }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "杠杆",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = "${leverageValue.toInt()}x",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        Slider(
+            value = leverageValue,
+            onValueChange = { value ->
+                onLeverageChange(BigDecimal(value.toInt().coerceIn(1, 125)))
+            },
+            valueRange = 1f..125f,
+            steps = 123
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("1x", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("125x", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -151,28 +187,101 @@ fun NumberInput(
     value: BigDecimal?,
     onValueChange: (BigDecimal?) -> Unit,
     label: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    readOnly: Boolean = false,
+    onReadOnlyTap: () -> Unit = {}
 ) {
-    val textValue = value?.toString() ?: ""
+    val textValue = value?.stripTrailingZeros()?.toPlainString() ?: ""
     var textFieldValue by remember { mutableStateOf(TextFieldValue(textValue)) }
-    
+
+    LaunchedEffect(value) {
+        val updatedValue = value?.stripTrailingZeros()?.toPlainString() ?: ""
+        val currentParsedValue = runCatching { BigDecimal(textFieldValue.text) }.getOrNull()
+        val currentMatchesValue = currentParsedValue != null &&
+            value != null &&
+            currentParsedValue.compareTo(value) == 0
+
+        if (value == null && textFieldValue.text.isNotEmpty()) {
+            textFieldValue = TextFieldValue("")
+        } else if (!currentMatchesValue && updatedValue != textFieldValue.text) {
+            textFieldValue = TextFieldValue(updatedValue)
+        }
+    }
+
     OutlinedTextField(
         value = textFieldValue,
-        onValueChange = { 
-            textFieldValue = it
-            if (it.text.isEmpty()) {
-                onValueChange(null)
-            } else {
-                try {
-                    onValueChange(BigDecimal(it.text))
-                } catch (e: NumberFormatException) {
-                    // Ignore invalid input
-                }
+        onValueChange = {
+            if (readOnly) {
+                return@OutlinedTextField
             }
+
+            val normalizedText = it.text.trim()
+            textFieldValue = it.copy(text = normalizedText)
+            if (normalizedText.isEmpty()) {
+                onValueChange(null)
+                return@OutlinedTextField
+            }
+
+            runCatching { BigDecimal(normalizedText) }
+                .onSuccess(onValueChange)
         },
         label = { Text(label) },
-        modifier = modifier,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        singleLine = true
+        modifier = modifier
+            .fillMaxWidth()
+            .pointerInput(readOnly) {
+                if (readOnly) {
+                    detectTapGestures { onReadOnlyTap() }
+                }
+            },
+        readOnly = readOnly,
+        shape = MaterialTheme.shapes.small,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        singleLine = true,
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = MaterialTheme.colorScheme.primary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f),
+            focusedContainerColor = MaterialTheme.colorScheme.surface,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+            cursorColor = MaterialTheme.colorScheme.primary
+        )
     )
+}
+
+@Composable
+fun SectionPanel(
+    title: String,
+    modifier: Modifier = Modifier,
+    trailing: (@Composable () -> Unit)? = null,
+    content: @Composable () -> Unit
+) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Box {
+                trailing?.invoke()
+            }
+        }
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.small,
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 1.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+        ) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                content()
+            }
+        }
+    }
 }

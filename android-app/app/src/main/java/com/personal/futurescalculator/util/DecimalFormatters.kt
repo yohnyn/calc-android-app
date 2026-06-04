@@ -6,7 +6,7 @@ import java.math.RoundingMode
 object DecimalFormatters {
     private const val CURRENCY_SCALE = 2
     private const val PERCENTAGE_SCALE = 2
-    private const val DEFAULT_SCALE = 18
+    private const val QUANTITY_SCALE = 8
     
     fun formatCurrency(value: BigDecimal?): String {
         if (value == null) return "--"
@@ -26,5 +26,12 @@ object DecimalFormatters {
         } else {
             formattedValue.toString()
         }
+    }
+
+    fun formatQuantity(value: BigDecimal?): String {
+        if (value == null) return "--"
+        return value.setScale(QUANTITY_SCALE, RoundingMode.HALF_UP)
+            .stripTrailingZeros()
+            .toPlainString()
     }
 }

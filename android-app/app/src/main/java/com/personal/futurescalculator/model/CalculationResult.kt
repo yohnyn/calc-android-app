@@ -12,6 +12,10 @@ data class CalculationResult(
     val totalFee: BigDecimal?,
     val netPnl: BigDecimal?,
     val roiPercent: BigDecimal?,
+    val targetProfitPriceByAmount: BigDecimal?,
+    val targetProfitPriceByRoi: BigDecimal?,
+    val stopLossPriceByAmount: BigDecimal?,
+    val stopLossPriceByRoi: BigDecimal?,
     val liquidationPrice: BigDecimal?,
     val distanceToLiquidationPercent: BigDecimal?
 )

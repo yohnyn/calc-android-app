@@ -108,14 +108,42 @@ fun CalculatorScreen(
         
         NumberInput(
             value = uiState.input.feeRatePercent,
-            onValueChange = { viewModel.updateInput(uiState.input.copy(feeRatePercent = it)) },
-            label = "手续费率 (%)"
+
+    onValueChange = {
+
+        viewModel.updateInput(
+
+            uiState.input.copy(
+
+                feeRatePercent = it ?: BigDecimal.ZERO
+
+            )
+
+        )
+
+    },
+
+    label = "手续费率 (%)"
         )
         
         NumberInput(
             value = uiState.input.maintenanceMarginRatePercent,
-            onValueChange = { viewModel.updateInput(uiState.input.copy(maintenanceMarginRatePercent = it)) },
-            label = "维持保证金率 (%)"
+
+    onValueChange = {
+
+        viewModel.updateInput(
+
+            uiState.input.copy(
+
+                maintenanceMarginRatePercent = it ?: BigDecimal.ZERO
+
+            )
+
+        )
+
+    },
+
+    label = "维持保证金率 (%)"
         )
         
         // Results
@@ -124,8 +152,9 @@ fun CalculatorScreen(
             style = MaterialTheme.typography.titleSmall
         )
         
-        if (uiState.result != null) {
-            ResultCard(result = uiState.result)
+        val result = uiState.result
+        if (result != null) {
+            ResultCard(result = result)
         } else {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -326,11 +355,8 @@ fun ComparisonItemCard(
                     text = item.name,
                     style = MaterialTheme.typography.titleMedium
                 )
-                IconButton(onClick = onRemove) {
-                    Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Default.Delete,
-                        contentDescription = "删除对比方案"
-                    )
+                androidx.compose.material3.TextButton(onClick = onRemove) {
+                    Text("删除")
                 }
             }
             

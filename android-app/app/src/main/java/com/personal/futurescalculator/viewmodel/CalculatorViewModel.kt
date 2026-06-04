@@ -1,6 +1,7 @@
 package com.personal.futurescalculator.viewmodel
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.personal.futurescalculator.domain.ComparisonCalculator
 import com.personal.futurescalculator.domain.FuturesCalculator
 import com.personal.futurescalculator.model.AmountField
@@ -56,7 +57,9 @@ class CalculatorViewModel : ViewModel() {
             val currentItems = _uiState.value.comparisonItems
             if (index >= 0 && index < currentItems.size) {
                 _uiState.value = _uiState.value.copy(comparisonItems = currentItems.filterIndexed {
-                    _, i -> i != index
+                    itemIndex, _ ->
+
+        itemIndex != index
                 })
                 calculateComparisonResults()
             }

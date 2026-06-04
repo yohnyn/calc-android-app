@@ -119,21 +119,21 @@ class FuturesCalculator {
     }
 
     private fun calculateMissingValues(input: CalculationInput): CalculationInput {
-        val newInput = input.copy()
-        
         // 如果成交数量为空，根据投入保证金计算
-        if (newInput.quantity == null && newInput.margin != null && newInput.entryPrice != null && newInput.leverage != null) {
-            val positionValue = newInput.margin * newInput.leverage
-            newInput.quantity = positionValue.divide(newInput.entryPrice!!, DIVIDE_SCALE, RoundingMode.HALF_UP)
+        if (input.quantity == null && input.margin != null && input.entryPrice != null && input.leverage != null) {
+            val positionValue = input.margin * input.leverage
+            val calculatedQuantity = positionValue.divide(input.entryPrice!!, DIVIDE_SCALE, RoundingMode.HALF_UP)
+            return input.copy(quantity = calculatedQuantity)
         }
         
         // 如果投入保证金为空，根据成交数量计算
-        if (newInput.margin == null && newInput.quantity != null && newInput.entryPrice != null && newInput.leverage != null) {
-            val positionValue = newInput.quantity * newInput.entryPrice
-            newInput.margin = positionValue.divide(newInput.leverage, DIVIDE_SCALE, RoundingMode.HALF_UP)
+        if (input.margin == null && input.quantity != null && input.entryPrice != null && input.leverage != null) {
+            val positionValue = input.quantity * input.entryPrice
+            val calculatedMargin = positionValue.divide(input.leverage, DIVIDE_SCALE, RoundingMode.HALF_UP)
+            return input.copy(margin = calculatedMargin)
         }
         
-        return newInput
+        return input
     }
 
     private fun calculateGrossPnl(input: CalculationInput): BigDecimal? {

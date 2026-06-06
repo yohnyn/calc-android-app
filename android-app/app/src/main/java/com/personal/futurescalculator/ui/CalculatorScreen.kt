@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
@@ -28,6 +30,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -44,8 +47,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -56,19 +59,23 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.window.Dialog
 import com.personal.futurescalculator.model.AmountField
 import com.personal.futurescalculator.model.AveragingDecisionInput
@@ -76,6 +83,7 @@ import com.personal.futurescalculator.model.AveragingDecisionResult
 import com.personal.futurescalculator.model.CalculationInput
 import com.personal.futurescalculator.model.CalculationResult
 import com.personal.futurescalculator.model.CoinAsset
+import com.personal.futurescalculator.model.CoinMarginedCalculationMode
 import com.personal.futurescalculator.model.CoinMarginedResult
 import com.personal.futurescalculator.model.HomeModule
 import com.personal.futurescalculator.model.HistoryCategory
@@ -97,12 +105,16 @@ import com.personal.futurescalculator.util.ClipboardFormatter
 import com.personal.futurescalculator.util.DecimalFormatters
 import com.personal.futurescalculator.viewmodel.CalculatorViewModel
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+
+private const val RESULT_CARD_MAIN = "main"
+private const val RESULT_CARD_COIN = "coin"
+private const val RESULT_CARD_AVERAGING = "averaging"
 
 @Composable
 fun CalculatorScreen(
@@ -112,29 +124,29 @@ fun CalculatorScreen(
     val uiState by viewModel.uiState.collectAsState()
     val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
-    var resultSectionOffset by remember { mutableIntStateOf(0) }
     var showFeeSettings by rememberSaveable { mutableStateOf(false) }
     var showCoinSelector by rememberSaveable { mutableStateOf(false) }
-    var showComparisonDiff by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showDonation by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
     var showMainResultDialog by rememberSaveable { mutableStateOf(false) }
+    var showCoinMarginedResultDialog by rememberSaveable { mutableStateOf(false) }
     var showAveragingResultDialog by rememberSaveable { mutableStateOf(false) }
     var showComparisonResultDialog by rememberSaveable { mutableStateOf(false) }
+    var revealedResultCards by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    var showCopySchemeDialog by rememberSaveable { mutableStateOf(false) }
     var comparisonEditorItem by remember { mutableStateOf<ComparisonItem?>(null) }
     var selectedComparisonIds by rememberSaveable { mutableStateOf(setOf<String>(MAIN_SCHEME_ID)) }
     var averagingValidationMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var operationRequirementMessage by rememberSaveable { mutableStateOf<String?>(null) }
-    var mainResultExpanded by rememberSaveable { mutableStateOf(true) }
-    var averagingResultExpanded by rememberSaveable { mutableStateOf(true) }
-    var previousMainResultComplete by remember { mutableStateOf(false) }
-    var previousAveragingResultComplete by remember { mutableStateOf(false) }
+    var averagingSymbolOverride by rememberSaveable { mutableStateOf<String?>(null) }
     var pnlDisplayMode by rememberSaveable { mutableStateOf(PnlDisplayMode.ProfitGreen) }
     var feedbackText by rememberSaveable { mutableStateOf("") }
-    var previousComparisonCount by remember { mutableIntStateOf(0) }
+    var comparisonSectionExpanded by rememberSaveable { mutableStateOf(true) }
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val hasPositionResult = uiState.result != null
     val hasPnlResult = uiState.result?.netPnl != null
     val profitLossPalette = when (pnlDisplayMode) {
@@ -147,77 +159,59 @@ fun CalculatorScreen(
             lossIndicator = "▼ "
         )
     }
-    val optimalScheme = if (uiState.comparisonItems.isNotEmpty()) {
-        findOptimalScheme(uiState.result, uiState.comparisonResults)
-    } else {
-        null
-    }
+    val selectedCoin = uiState.coins.firstOrNull { it.id == uiState.selectedCoinId }
     val hasValidComparisonScheme = uiState.comparisonItems.indices.any { index ->
         uiState.comparisonResults.getOrNull(index)?.result?.netPnl != null
     }
     val averagingSchemes = if (hasValidComparisonScheme) {
         buildList {
-            uiState.result?.takeIf { it.netPnl != null }?.let { add(ExistingScheme("当前主方案", uiState.input, it)) }
+            uiState.result?.takeIf { it.netPnl != null }?.let {
+                add(ExistingScheme("当前主方案", selectedCoin?.symbol ?: "币", uiState.input, it))
+            }
             uiState.comparisonItems.forEachIndexed { index, item ->
                 uiState.comparisonResults.getOrNull(index)?.result?.takeIf { it.netPnl != null }?.let {
-                    add(ExistingScheme(item.name, item.input, it))
+                    add(
+                        ExistingScheme(
+                            item.name,
+                            uiState.coins.firstOrNull { coin -> coin.id == item.coinId }?.symbol ?: "币",
+                            item.input,
+                            it
+                        )
+                    )
                 }
             }
         }
     } else {
         emptyList()
     }
-    val selectedCoin = uiState.coins.firstOrNull { it.id == uiState.selectedCoinId }
     val comparisonSchemes = buildComparisonSchemes(
         mainInput = uiState.input,
         mainResult = uiState.result,
         mainSymbol = selectedCoin?.symbol ?: "币",
+        mainSettlementMode = uiState.settlementMode,
+        mainCoinMarginedCalculationMode = uiState.coinMarginedCalculationMode,
         items = uiState.comparisonItems,
         results = uiState.comparisonResults,
         coins = uiState.coins
     )
-    val closeResultDialogAndScroll: () -> Unit = {
-        showMainResultDialog = false
-        mainResultExpanded = true
-        coroutineScope.launch {
-            delay(100)
-            scrollState.animateScrollTo(resultSectionOffset.coerceAtLeast(0))
+    val hideKeyboardAndClearFocus: () -> Unit = {
+        focusManager.clearFocus(force = true)
+        keyboardController?.hide()
+    }
+    val submitMainResult: () -> Unit = {
+        hideKeyboardAndClearFocus()
+        when {
+            uiState.settlementMode == SettlementMode.UsdtMargined && uiState.result?.netPnl != null ->
+                showMainResultDialog = true
+            uiState.settlementMode == SettlementMode.CoinMargined && uiState.coinMarginedResult != null ->
+                showCoinMarginedResultDialog = true
         }
     }
 
-    LaunchedEffect(uiState.comparisonItems.size) {
-        if (uiState.comparisonItems.size > previousComparisonCount) {
-            delay(180)
-            scrollState.animateScrollTo(
-                (scrollState.maxValue - scrollState.viewportSize / 3).coerceAtLeast(0)
-            )
-        }
-        previousComparisonCount = uiState.comparisonItems.size
-    }
     LaunchedEffect(uiState.comparisonItems.map { it.id }) {
         val validIds = uiState.comparisonItems.map { it.id }.toSet() + MAIN_SCHEME_ID
         selectedComparisonIds = selectedComparisonIds.intersect(validIds)
     }
-    LaunchedEffect(hasPnlResult) {
-        if (hasPnlResult && !previousMainResultComplete) {
-            showMainResultDialog = true
-        }
-        previousMainResultComplete = hasPnlResult
-    }
-    LaunchedEffect(uiState.averagingDecisionResult != null) {
-        val complete = uiState.averagingDecisionResult != null
-        if (complete && !previousAveragingResultComplete) {
-            showAveragingResultDialog = true
-        }
-        previousAveragingResultComplete = complete
-    }
-    LaunchedEffect(uiState.iconDownloadNotice) {
-        uiState.iconDownloadNotice?.let {
-            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
-            viewModel.consumeIconDownloadNotice()
-        }
-    }
-
     CompositionLocalProvider(LocalProfitLossPalette provides profitLossPalette) {
     if (showSettings) {
         SettingsScreen(
@@ -228,11 +222,14 @@ fun CalculatorScreen(
             onModuleOrderChange = viewModel::updateModuleOrder,
             onResetModuleOrder = viewModel::resetModuleOrder,
             onModuleVisibilityChange = viewModel::setModuleVisible,
+            onResetModuleVisibility = viewModel::resetModuleVisibility,
             feedbackText = feedbackText,
             onFeedbackChange = { feedbackText = it },
             priceUpdatedAt = uiState.priceUpdatedAt,
             themeMode = uiState.themeMode,
             onThemeModeChange = viewModel::updateThemeMode,
+            coinMarginedCalculationMode = uiState.coinMarginedCalculationMode,
+            onCoinMarginedCalculationModeChange = viewModel::updateCoinMarginedCalculationMode,
             onBack = { showSettings = false }
         )
         return@CompositionLocalProvider
@@ -271,37 +268,73 @@ fun CalculatorScreen(
             },
             onAddCustom = viewModel::addCustomCoin,
             onDeleteCustom = viewModel::deleteCustomCoin,
-            onDownloadIcon = viewModel::downloadCoinIcon,
-            downloadingIconIds = uiState.downloadingIconIds,
             onDismiss = { showCoinSelector = false }
         )
     }
     if (showMainResultDialog && uiState.result?.netPnl != null) {
         MainResultDialog(
+            input = uiState.input,
             result = uiState.result!!,
-            onDismiss = closeResultDialogAndScroll,
-            onExpand = closeResultDialogAndScroll
+            symbol = selectedCoin?.symbol ?: "币",
+            onDismiss = {
+                revealedResultCards = revealedResultCards + RESULT_CARD_MAIN
+                showMainResultDialog = false
+            }
         )
     }
     if (showAveragingResultDialog && uiState.averagingDecisionResult != null) {
         AveragingResultDialog(
+            input = uiState.averagingDecisionInput,
             result = uiState.averagingDecisionResult!!,
-            symbol = selectedCoin?.symbol ?: "币",
-            onDismiss = { showAveragingResultDialog = false },
-            onExpand = {
-                averagingResultExpanded = true
+            symbol = averagingSymbolOverride ?: selectedCoin?.symbol ?: "币",
+            onDismiss = {
+                revealedResultCards = revealedResultCards + RESULT_CARD_AVERAGING
                 showAveragingResultDialog = false
+            }
+        )
+    }
+    if (showCoinMarginedResultDialog && uiState.coinMarginedResult != null) {
+        CoinMarginedResultDialog(
+            input = uiState.input,
+            result = uiState.coinMarginedResult!!,
+            symbol = selectedCoin?.symbol ?: "币",
+            onDismiss = {
+                revealedResultCards = revealedResultCards + RESULT_CARD_COIN
+                showCoinMarginedResultDialog = false
             }
         )
     }
     if (showComparisonResultDialog) {
         ComparisonResultDialog(
             schemes = comparisonSchemes.filter { it.id in selectedComparisonIds },
-            onDismiss = { showComparisonResultDialog = false },
-            onExpand = {
-                showComparisonDiff = true
-                showComparisonResultDialog = false
-            }
+            onDismiss = { showComparisonResultDialog = false }
+        )
+    }
+    if (uiState.showCoinMarginedModeDialog) {
+        CoinMarginedModeDialog(
+            initialMode = uiState.coinMarginedCalculationMode,
+            onConfirm = viewModel::onCoinMarginedModeSelected,
+            onDismiss = viewModel::dismissCoinMarginedModeDialog
+        )
+    }
+    if (showCopySchemeDialog) {
+        CopySchemeDialog(
+            schemes = comparisonSchemes.filter { it.result?.netPnl != null },
+            onSelect = { scheme ->
+                clipboardManager.setText(
+                    AnnotatedString(
+                        ClipboardFormatter.formatSinglePerformance(
+                            name = scheme.name,
+                            symbol = scheme.symbol,
+                            input = scheme.input,
+                            result = scheme.result
+                        )
+                    )
+                )
+                showCopySchemeDialog = false
+                Toast.makeText(context, "${scheme.name}战绩已复制", Toast.LENGTH_SHORT).show()
+            },
+            onDismiss = { showCopySchemeDialog = false }
         )
     }
     comparisonEditorItem?.let { item ->
@@ -309,6 +342,7 @@ fun CalculatorScreen(
             initialItem = item,
             coins = uiState.coins,
             onSave = {
+                hideKeyboardAndClearFocus()
                 viewModel.saveComparisonItem(it)
                 selectedComparisonIds = selectedComparisonIds + it.id
                 comparisonEditorItem = null
@@ -366,8 +400,8 @@ fun CalculatorScreen(
                         firstText = "U 本位",
                         secondText = "币本位",
                         firstSelected = uiState.settlementMode == SettlementMode.UsdtMargined,
-                        onFirstClick = { viewModel.updateSettlementMode(SettlementMode.UsdtMargined) },
-                        onSecondClick = { viewModel.updateSettlementMode(SettlementMode.CoinMargined) }
+                        onFirstClick = { viewModel.onContractModeChanged(SettlementMode.UsdtMargined) },
+                        onSecondClick = { viewModel.onContractModeChanged(SettlementMode.CoinMargined) }
                     )
                 }
             }
@@ -400,21 +434,24 @@ fun CalculatorScreen(
                         value = uiState.input.entryPrice,
                         onValueChange = { viewModel.updateInput(uiState.input.copy(entryPrice = it)) },
                         label = "开仓价",
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        onSubmit = submitMainResult
                     )
                     if (uiState.settlementMode == SettlementMode.UsdtMargined) {
                         NumberInput(
                             value = uiState.input.margin,
                             onValueChange = { viewModel.updateAmountInput(AmountField.Margin, it) },
                             label = "保证金 USDT",
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            onSubmit = submitMainResult
                         )
                     } else {
                         NumberInput(
                             value = uiState.input.quantity,
                             onValueChange = { viewModel.updateAmountInput(AmountField.Quantity, it) },
                             label = "${selectedCoin?.symbol ?: "币"} 数量",
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            onSubmit = submitMainResult
                         )
                     }
                 }
@@ -422,6 +459,21 @@ fun CalculatorScreen(
                     leverage = uiState.input.leverage,
                     onLeverageChange = { viewModel.updateInput(uiState.input.copy(leverage = it)) }
                 )
+                if (
+                    uiState.input.marginMode == MarginMode.Cross
+                ) {
+                    NumberInput(
+                        value = uiState.input.totalFunds,
+                        onValueChange = { viewModel.updateInput(uiState.input.copy(totalFunds = it)) },
+                        label = "账户总资金 USDT（全仓强平估算）",
+                        onSubmit = submitMainResult
+                    )
+                    Text(
+                        text = "全仓时账户总资金会直接影响强平价估算，建议填写；不影响仓位收益计算。",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Text(
                     text = if (uiState.settlementMode == SettlementMode.UsdtMargined) {
                         "U 本位使用保证金与杠杆计算仓位。"
@@ -449,7 +501,8 @@ fun CalculatorScreen(
                             )
                         )
                     },
-                    label = "平仓价"
+                    label = "平仓价",
+                    onSubmit = submitMainResult
                 )
                 Text(
                     text = if (uiState.settlementMode == SettlementMode.UsdtMargined) {
@@ -466,13 +519,15 @@ fun CalculatorScreen(
                             value = uiState.input.targetProfitAmount,
                             onValueChange = { viewModel.updateInput(uiState.input.copy(targetProfitAmount = it, targetRoiPercent = null, exitPrice = null)) },
                             label = "目标收益 USDT",
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            onSubmit = submitMainResult
                         )
                         NumberInput(
                             value = uiState.input.targetRoiPercent,
                             onValueChange = { viewModel.updateInput(uiState.input.copy(targetProfitAmount = null, targetRoiPercent = it, exitPrice = null)) },
                             label = "目标 ROI %",
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            onSubmit = submitMainResult
                         )
                     }
                     InputRow {
@@ -480,13 +535,15 @@ fun CalculatorScreen(
                             value = uiState.input.maxLossAmount,
                             onValueChange = { viewModel.updateInput(uiState.input.copy(maxLossAmount = it, maxLossRoiPercent = null, exitPrice = null)) },
                             label = "最大亏损 USDT",
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            onSubmit = submitMainResult
                         )
                         NumberInput(
                             value = uiState.input.maxLossRoiPercent,
                             onValueChange = { viewModel.updateInput(uiState.input.copy(maxLossAmount = null, maxLossRoiPercent = it, exitPrice = null)) },
                             label = "最大亏损 ROI %",
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            onSubmit = submitMainResult
                         )
                     }
                 }
@@ -494,31 +551,18 @@ fun CalculatorScreen(
             }
 
             HomeModule.Result -> {
-            if (uiState.settlementMode == SettlementMode.UsdtMargined && hasPositionResult) {
-                SectionPanel(
-                    title = "计算结果",
-                    modifier = Modifier.onGloballyPositioned {
-                        resultSectionOffset = it.positionInParent().y.roundToInt()
-                    },
-                    trailing = {
-                        TextButton(onClick = { mainResultExpanded = !mainResultExpanded }) {
-                            Text(if (mainResultExpanded) "收起结果" else "展开结果")
+            if (uiState.settlementMode == SettlementMode.UsdtMargined && hasPositionResult && RESULT_CARD_MAIN in revealedResultCards) {
+                SectionPanel(title = "计算结果") {
+                    CompactExpandableResultCard(
+                        label = "净盈亏 · ROI",
+                        value = "${pnlText(uiState.result!!.netPnl, DecimalFormatters.formatPositiveNegative(uiState.result!!.netPnl))} USDT · ${DecimalFormatters.formatPercentage(uiState.result!!.roiPercent)}",
+                        valueColor = pnlColor(uiState.result!!.netPnl),
+                        enabled = uiState.result?.netPnl != null,
+                        onClick = {
+                            hideKeyboardAndClearFocus()
+                            showMainResultDialog = true
                         }
-                    }
-                ) {
-                    if (mainResultExpanded) {
-                        ResultCard(
-                            result = uiState.result!!,
-                            symbol = selectedCoin?.symbol ?: "币",
-                            marginMode = uiState.input.marginMode,
-                            totalFunds = uiState.input.totalFunds,
-                            onTotalFundsChange = {
-                                viewModel.updateInput(uiState.input.copy(totalFunds = it))
-                            }
-                        )
-                    } else {
-                        CollapsedMainResult(result = uiState.result!!)
-                    }
+                    )
                     if (uiState.result?.netPnl != null) {
                         SoftOutlinedButton(
                             onClick = {
@@ -536,11 +580,16 @@ fun CalculatorScreen(
                         ) { Text("保存本次结果") }
                     }
                 }
-            } else if (uiState.settlementMode == SettlementMode.CoinMargined && uiState.coinMarginedResult != null) {
+            } else if (uiState.settlementMode == SettlementMode.CoinMargined && uiState.coinMarginedResult != null && RESULT_CARD_COIN in revealedResultCards) {
                 SectionPanel(title = "币本位结果") {
-                    CoinMarginedResultCard(
-                        result = uiState.coinMarginedResult!!,
-                        symbol = selectedCoin?.symbol ?: "币"
+                    CompactExpandableResultCard(
+                        label = "币本位盈亏",
+                        value = "${DecimalFormatters.formatPositiveNegative(uiState.coinMarginedResult!!.pnlCoin)} ${selectedCoin?.symbol ?: "币"}",
+                        valueColor = pnlColor(uiState.coinMarginedResult!!.pnlCoin),
+                        onClick = {
+                            hideKeyboardAndClearFocus()
+                            showCoinMarginedResultDialog = true
+                        }
                     )
                 }
             }
@@ -551,13 +600,14 @@ fun CalculatorScreen(
                 AveragingDecisionSection(
                     input = uiState.averagingDecisionInput,
                     result = uiState.averagingDecisionResult,
+                    showResultCard = RESULT_CARD_AVERAGING in revealedResultCards,
                     schemes = averagingSchemes,
-                    symbol = selectedCoin?.symbol ?: "币",
+                    symbol = averagingSymbolOverride ?: selectedCoin?.symbol ?: "币",
                     onInputChange = viewModel::updateAveragingDecisionInput,
                     onCollapse = { viewModel.setAveragingExpanded(false) },
-                    resultExpanded = averagingResultExpanded,
-                    onResultExpandedChange = { averagingResultExpanded = it },
+                    onSchemeFilled = { averagingSymbolOverride = it.symbol },
                     onRequestResult = {
+                        hideKeyboardAndClearFocus()
                         val hasCurrentHolding =
                             uiState.averagingDecisionInput.currentEntryPrice?.let { it > BigDecimal.ZERO } == true &&
                                 uiState.averagingDecisionInput.currentQuantity?.let { it > BigDecimal.ZERO } == true
@@ -578,7 +628,7 @@ fun CalculatorScreen(
                                 createAveragingHistorySnapshot(
                                     uiState.averagingDecisionInput,
                                     uiState.averagingDecisionResult!!,
-                                    selectedCoin?.symbol ?: "币"
+                                    averagingSymbolOverride ?: selectedCoin?.symbol ?: "币"
                                 )
                             )
                             Toast.makeText(context, "本次补仓模拟已保存", Toast.LENGTH_SHORT).show()
@@ -595,41 +645,26 @@ fun CalculatorScreen(
             SectionPanel(
                 title = "收益方案对比",
                 trailing = {
-                    Text(
-                        text = "共 ${comparisonSchemes.size} 个方案",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    TextButton(
+                        onClick = { comparisonSectionExpanded = !comparisonSectionExpanded },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Text(if (comparisonSectionExpanded) "收起" else "展开", fontWeight = FontWeight.Bold)
+                    }
                 }
             ) {
+                if (!comparisonSectionExpanded) {
+                    Text(
+                        text = "共 ${comparisonSchemes.size} 个方案，点击展开继续编辑或查看收益对比。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
                 Text(
                     text = "比较多个交易方案最终收益",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                if (showComparisonDiff) {
-                    ComparisonResultsOverview(
-                        schemes = comparisonSchemes.filter { it.id in selectedComparisonIds }
-                    )
-                    SoftOutlinedButton(
-                        onClick = {
-                            viewModel.saveHistoryRecord(
-                                createComparisonHistorySnapshot(
-                                    comparisonSchemes.filter { it.id in selectedComparisonIds }
-                                )
-                            )
-                            Toast.makeText(context, "本次方案对比已保存", Toast.LENGTH_SHORT).show()
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("保存本次结果") }
-                    SoftOutlinedButton(
-                        onClick = { showComparisonDiff = false },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = MaterialTheme.shapes.small
-                    ) {
-                        Text("返回方案列表")
-                    }
-                } else {
                     Text(
                         text = "选择对比",
                         style = MaterialTheme.typography.labelLarge,
@@ -660,6 +695,8 @@ fun CalculatorScreen(
                                 id = "item_${System.currentTimeMillis()}",
                                 name = "方案 ${uiState.comparisonItems.size + 2}",
                                 coinId = uiState.selectedCoinId,
+                                settlementMode = uiState.settlementMode,
+                                coinMarginedCalculationMode = uiState.coinMarginedCalculationMode,
                                 input = CalculationInput()
                             )
                         },
@@ -675,32 +712,26 @@ fun CalculatorScreen(
                             if (message != null) {
                                 operationRequirementMessage = message
                             } else {
-                                showComparisonDiff = true
+                                hideKeyboardAndClearFocus()
                                 showComparisonResultDialog = true
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape = MaterialTheme.shapes.small
                     ) {
-                        Text("查看收益对比")
+                        Text("展开收益对比结果")
                     }
                 }
             }
             }
+            HomeModule.History -> Unit
             }
             }
 
             if (uiState.settlementMode == SettlementMode.UsdtMargined && hasPnlResult) {
             Button(
                 onClick = {
-                    val text = ClipboardFormatter.formatPerformance(
-                        input = uiState.input,
-                        result = uiState.result,
-                        comparisons = uiState.comparisonResults,
-                        optimalSchemeName = optimalScheme?.first
-                    )
-                    clipboardManager.setText(AnnotatedString(text))
-                    Toast.makeText(context, "战绩已复制", Toast.LENGTH_SHORT).show()
+                    showCopySchemeDialog = true
                 },
                 modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.small
@@ -725,15 +756,15 @@ fun CalculatorScreen(
                 }
                 SoftOutlinedButton(
                     onClick = {
-                        showComparisonDiff = false
                         showFeeSettings = false
                         showMainResultDialog = false
+                        showCoinMarginedResultDialog = false
                         showComparisonResultDialog = false
                         showAveragingResultDialog = false
+                        revealedResultCards = emptySet()
                         averagingValidationMessage = null
                         operationRequirementMessage = null
-                        mainResultExpanded = true
-                        averagingResultExpanded = true
+                        averagingSymbolOverride = null
                         viewModel.reset()
                         coroutineScope.launch { scrollState.animateScrollTo(0) }
                     },
@@ -941,8 +972,6 @@ private fun CoinSelectorDialog(
     onSelect: (String) -> Unit,
     onAddCustom: (String, BigDecimal) -> Unit,
     onDeleteCustom: (String) -> Unit,
-    onDownloadIcon: (String) -> Unit,
-    downloadingIconIds: Set<String>,
     onDismiss: () -> Unit
 ) {
     var search by remember { mutableStateOf("") }
@@ -978,15 +1007,15 @@ private fun CoinSelectorDialog(
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
-            modifier = Modifier.fillMaxWidth().widthIn(max = 460.dp),
+            modifier = Modifier.fillMaxWidth().widthIn(max = 440.dp),
             shape = MaterialTheme.shapes.medium,
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("选择币种", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("选择币种", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 OutlinedTextField(
                     value = search,
                     onValueChange = { search = it },
@@ -995,8 +1024,8 @@ private fun CoinSelectorDialog(
                     singleLine = true
                 )
                 LazyColumn(
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     items(filtered, key = { it.id }) { coin ->
                         Surface(
@@ -1009,7 +1038,7 @@ private fun CoinSelectorDialog(
                             }
                         ) {
                             Row(
-                                modifier = Modifier.fillMaxWidth().padding(10.dp),
+                                modifier = Modifier.fillMaxWidth().padding(8.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -1022,21 +1051,10 @@ private fun CoinSelectorDialog(
                                     Text(coin.symbol, fontWeight = FontWeight.SemiBold)
                                 }
                                 if (coin.isCustom) {
-                                    TextButton(onClick = { onDeleteCustom(coin.id) }) { Text("删除") }
-                                } else if (coin.iconPath == null) {
                                     TextButton(
-                                        onClick = { onDownloadIcon(coin.id) },
-                                        enabled = coin.id !in downloadingIconIds
-                                    ) {
-                                        Text(
-                                            text = "⤓",
-                                            modifier = Modifier.semantics {
-                                                contentDescription = "下载图标"
-                                            },
-                                            style = MaterialTheme.typography.headlineSmall,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    }
+                                        onClick = { onDeleteCustom(coin.id) },
+                                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                                    ) { Text("删除", fontWeight = FontWeight.SemiBold) }
                                 }
                             }
                         }
@@ -1047,9 +1065,9 @@ private fun CoinSelectorDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
                 ) {
                     TextButton(onClick = { showCustomForm = true }) {
-                        Text("添加自定义币种")
+                        Text("添加自定义币种", fontWeight = FontWeight.SemiBold)
                     }
-                    TextButton(onClick = onDismiss) { Text("关闭") }
+                    TextButton(onClick = onDismiss) { Text("关闭", fontWeight = FontWeight.SemiBold) }
                 }
             }
         }
@@ -1071,19 +1089,19 @@ private fun CustomCoinDialog(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .widthIn(max = 420.dp),
+                .widthIn(max = 400.dp),
             shape = MaterialTheme.shapes.medium,
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.22f))
         ) {
             Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
                         text = "添加自定义币种",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
@@ -1092,12 +1110,11 @@ private fun CustomCoinDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                OutlinedTextField(
+                CompactTextInput(
                     value = symbol,
                     onValueChange = onSymbolChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("币种名称，例如 ABC") },
-                    singleLine = true
+                    modifier = Modifier.widthIn(max = 220.dp),
+                    label = "币种名称，例如 ABC"
                 )
                 NumberInput(
                     value = price,
@@ -1109,7 +1126,7 @@ private fun CustomCoinDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
                 ) {
                     TextButton(onClick = onDismiss) {
-                        Text("取消")
+                        Text("取消", fontWeight = FontWeight.SemiBold)
                     }
                     Button(
                         onClick = onSave,
@@ -1165,25 +1182,24 @@ private fun FeeSettingsDialog(
     var maintenanceMarginRate by remember(input.maintenanceMarginRatePercent) {
         mutableStateOf(input.maintenanceMarginRatePercent)
     }
-    var totalFunds by remember(input.totalFunds) { mutableStateOf(input.totalFunds) }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .widthIn(max = 420.dp),
+                .widthIn(max = 400.dp),
             shape = MaterialTheme.shapes.medium,
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.16f))
         ) {
             Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
                         text = "费率设置",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
@@ -1211,16 +1227,6 @@ private fun FeeSettingsDialog(
                     onValueChange = { maintenanceMarginRate = it ?: BigDecimal.ZERO },
                     label = "维持保证金率 %"
                 )
-                NumberInput(
-                    value = totalFunds,
-                    onValueChange = { totalFunds = it },
-                    label = "总资金（可选）"
-                )
-                Text(
-                    text = "用于提高全仓模式下强平价估算准确度；不填写时保持原估算逻辑。",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
@@ -1231,13 +1237,12 @@ private fun FeeSettingsDialog(
                             openFee = BigDecimal("0.05")
                             closeFee = BigDecimal("0.05")
                             maintenanceMarginRate = BigDecimal("0.5")
-                            totalFunds = null
                         }
                     ) {
                         Text("恢复默认")
                     }
                     TextButton(onClick = onDismiss) {
-                        Text("取消")
+                        Text("取消", fontWeight = FontWeight.SemiBold)
                     }
                     Button(
                         onClick = {
@@ -1245,8 +1250,7 @@ private fun FeeSettingsDialog(
                                 input.copy(
                                     openFeeRatePercent = openFee,
                                     closeFeeRatePercent = closeFee,
-                                    maintenanceMarginRatePercent = maintenanceMarginRate,
-                                    totalFunds = totalFunds
+                                    maintenanceMarginRatePercent = maintenanceMarginRate
                                 )
                             )
                         },
@@ -1299,12 +1303,12 @@ private fun AveragingDecisionEntryCard(onClick: () -> Unit) {
 private fun AveragingDecisionSection(
     input: AveragingDecisionInput,
     result: AveragingDecisionResult?,
+    showResultCard: Boolean,
     schemes: List<ExistingScheme>,
     symbol: String,
     onInputChange: (AveragingDecisionInput) -> Unit,
     onCollapse: () -> Unit,
-    resultExpanded: Boolean,
-    onResultExpandedChange: (Boolean) -> Unit,
+    onSchemeFilled: (ExistingScheme) -> Unit,
     onRequestResult: () -> Unit
 ) {
     var showSchemeDialog by remember { mutableStateOf(false) }
@@ -1323,6 +1327,7 @@ private fun AveragingDecisionSection(
                         currentLeverage = scheme.input.leverage
                     )
                 )
+                onSchemeFilled(scheme)
                 schemeFillMessage = "已填入${scheme.name}"
                 showSchemeDialog = false
             },
@@ -1333,8 +1338,11 @@ private fun AveragingDecisionSection(
     SectionPanel(
         title = "补仓决策模拟",
         trailing = {
-            TextButton(onClick = onCollapse) {
-                Text("收起")
+            TextButton(
+                onClick = onCollapse,
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Text("收起", fontWeight = FontWeight.Bold)
             }
         }
     ) {
@@ -1482,20 +1490,13 @@ private fun AveragingDecisionSection(
             }
         }
 
-        if (result != null) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                TextButton(onClick = { onResultExpandedChange(!resultExpanded) }) {
-                    Text(if (resultExpanded) "收起结果" else "展开结果")
-                }
-            }
-            if (resultExpanded) {
-                AveragingDecisionResultCard(result, symbol)
-            } else {
-                CollapsedAveragingResult(result)
-            }
+        if (result != null && showResultCard) {
+            CompactExpandableResultCard(
+                label = "目标价收益变化",
+                value = "${pnlText(result.pnlChange, DecimalFormatters.formatPositiveNegative(result.pnlChange))} USDT",
+                valueColor = pnlColor(result.pnlChange),
+                onClick = onRequestResult
+            )
         } else {
             Text(
                 text = "填写完整参数后显示补仓前后目标价收益对比。",
@@ -1516,18 +1517,18 @@ private fun SchemeSelectionDialog(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .widthIn(max = 440.dp),
+                .widthIn(max = 400.dp),
             shape = MaterialTheme.shapes.medium,
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.16f))
         ) {
             Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
                     text = "选择方案填入",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
@@ -1545,11 +1546,11 @@ private fun SchemeSelectionDialog(
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
                     ) {
                         Column(
-                            modifier = Modifier.padding(12.dp),
+                            modifier = Modifier.padding(10.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
-                                text = scheme.name,
+                                text = "${scheme.name} · ${scheme.symbol}",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.secondary
@@ -1559,7 +1560,7 @@ private fun SchemeSelectionDialog(
                                 style = MaterialTheme.typography.labelLarge
                             )
                             Text(
-                                text = "开仓价 ${DecimalFormatters.formatCurrency(scheme.input.entryPrice)} USDT · 币数量 ${DecimalFormatters.formatQuantity(scheme.result.quantity)}",
+                                text = "开仓价 ${DecimalFormatters.formatCurrency(scheme.input.entryPrice)} USDT · ${scheme.symbol} 数量 ${DecimalFormatters.formatQuantity(scheme.result.quantity)}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1575,7 +1576,61 @@ private fun SchemeSelectionDialog(
                     onClick = onDismiss,
                     modifier = Modifier.align(Alignment.End)
                 ) {
-                    Text("取消")
+                    Text("取消", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CopySchemeDialog(
+    schemes: List<ComparisonSchemeView>,
+    onSelect: (ComparisonSchemeView) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier.fillMaxWidth().widthIn(max = 400.dp).heightIn(max = 660.dp),
+            shape = MaterialTheme.shapes.medium,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(
+                modifier = Modifier.padding(14.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("选择要复制的单子", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    "每次只复制一个方案，避免不同单子的参数和结果混在一起。",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                schemes.forEach { scheme ->
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().clickable { onSelect(scheme) },
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CoinIcon(scheme.coin, 30)
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text("${scheme.name} · ${scheme.symbol}", fontWeight = FontWeight.Bold)
+                                Text(
+                                    "${scheme.input.side.label()} · ${scheme.input.leverage.stripTrailingZeros().toPlainString()}x · 净盈亏 ${DecimalFormatters.formatPositiveNegative(scheme.result?.netPnl)} USDT",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Text("复制", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+                TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
+                    Text("取消", fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -1584,6 +1639,7 @@ private fun SchemeSelectionDialog(
 
 private data class ExistingScheme(
     val name: String,
+    val symbol: String,
     val input: CalculationInput,
     val result: CalculationResult
 )
@@ -1633,53 +1689,143 @@ private fun averagingMissingFields(input: AveragingDecisionInput): List<String> 
 
 @Composable
 private fun MainResultDialog(
+    input: CalculationInput,
     result: CalculationResult,
-    onDismiss: () -> Unit,
-    onExpand: () -> Unit
+    symbol: String,
+    onDismiss: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Card(
-            modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp),
+            modifier = Modifier.fillMaxWidth().widthIn(max = 400.dp).heightIn(max = 660.dp),
             shape = MaterialTheme.shapes.medium,
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.28f))
         ) {
             Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.padding(14.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("计算结果", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                MetricTile(
-                    label = "净盈亏",
-                    value = "${pnlText(result.netPnl, DecimalFormatters.formatPositiveNegative(result.netPnl))} USDT",
-                    valueColor = pnlColor(result.netPnl),
-                    highlight = true
+                Text("计算结果", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                ResultCard(
+                    result = result,
+                    symbol = symbol
                 )
-                InputRow {
-                    MetricTile(
-                        label = "ROI",
-                        value = DecimalFormatters.formatPercentage(result.roiPercent),
-                        valueColor = pnlColor(result.roiPercent),
-                        modifier = Modifier.weight(1f)
-                    )
-                    MetricTile(
-                        label = "总手续费约",
-                        value = "${DecimalFormatters.formatCurrency(result.totalFee)} USDT",
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                MetricTile(
-                    label = "估算强平价",
-                    value = result.liquidationPrice?.let { "${DecimalFormatters.formatCurrency(it)} USDT" } ?: "无法可靠估算",
-                    supporting = if (result.usedTotalFundsForLiquidation) "已使用总资金参与强平计算" else null
-                )
-                Row(
+                CalculationInputDetails(input = input, symbol = symbol, settlementMode = SettlementMode.UsdtMargined)
+                Button(
+                    onClick = onDismiss,
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+                    shape = MaterialTheme.shapes.small
                 ) {
-                    TextButton(onClick = onDismiss) { Text("关闭") }
-                    Button(onClick = onExpand, shape = MaterialTheme.shapes.small) { Text("展开详情") }
+                    Text("关闭")
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CoinMarginedResultDialog(
+    input: CalculationInput,
+    result: CoinMarginedResult,
+    symbol: String,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier.fillMaxWidth().widthIn(max = 400.dp).heightIn(max = 660.dp),
+            shape = MaterialTheme.shapes.medium,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(
+                modifier = Modifier.padding(14.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("币本位计算结果", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                CoinMarginedResultCard(result, symbol)
+                CalculationInputDetails(input = input, symbol = symbol, settlementMode = SettlementMode.CoinMargined)
+                Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.small) {
+                    Text("关闭")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalculationInputDetails(
+    input: CalculationInput,
+    symbol: String,
+    settlementMode: SettlementMode
+) {
+    SectionPanel(title = "交易参数") {
+        Text(
+            text = "${input.side.label()} · ${input.marginMode.label()} · ${input.leverage.stripTrailingZeros().toPlainString()}x · ${if (settlementMode == SettlementMode.UsdtMargined) "U 本位" else "币本位"}",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        InputRow {
+            MetricTile(
+                label = "开仓价",
+                value = "${DecimalFormatters.formatCurrency(input.entryPrice)} USDT",
+                modifier = Modifier.weight(1f)
+            )
+            MetricTile(
+                label = "平仓价",
+                value = "${DecimalFormatters.formatCurrency(input.exitPrice)} USDT",
+                modifier = Modifier.weight(1f)
+            )
+        }
+        InputRow {
+            MetricTile(
+                label = "输入保证金",
+                value = input.margin?.let { "${DecimalFormatters.formatCurrency(it)} USDT" } ?: "未填写",
+                modifier = Modifier.weight(1f)
+            )
+            MetricTile(
+                label = "输入币数量",
+                value = input.quantity?.let { "${DecimalFormatters.formatQuantity(it)} $symbol" } ?: "未填写",
+                modifier = Modifier.weight(1f)
+            )
+        }
+        InputRow {
+            MetricTile(
+                label = "开仓 / 平仓费率",
+                value = "${input.openFeeRatePercent.stripTrailingZeros().toPlainString()}% / ${input.closeFeeRatePercent.stripTrailingZeros().toPlainString()}%",
+                modifier = Modifier.weight(1f)
+            )
+            MetricTile(
+                label = "维持保证金率",
+                value = "${input.maintenanceMarginRatePercent.stripTrailingZeros().toPlainString()}%",
+                modifier = Modifier.weight(1f)
+            )
+        }
+        if (input.marginMode == MarginMode.Cross) {
+            MetricTile(
+                label = "账户总资金",
+                value = input.totalFunds?.let { "${DecimalFormatters.formatCurrency(it)} USDT" } ?: "未填写"
+            )
+        }
+        if (
+            input.targetProfitAmount != null ||
+            input.targetRoiPercent != null ||
+            input.maxLossAmount != null ||
+            input.maxLossRoiPercent != null
+        ) {
+            InputRow {
+                MetricTile(
+                    label = "目标收益",
+                    value = input.targetProfitAmount?.let { "${DecimalFormatters.formatCurrency(it)} USDT" }
+                        ?: input.targetRoiPercent?.let { "${DecimalFormatters.formatPercentage(it)} ROI" }
+                        ?: "未填写",
+                    modifier = Modifier.weight(1f)
+                )
+                MetricTile(
+                    label = "最大亏损",
+                    value = input.maxLossAmount?.let { "${DecimalFormatters.formatCurrency(it)} USDT" }
+                        ?: input.maxLossRoiPercent?.let { "${DecimalFormatters.formatPercentage(it)} ROI" }
+                        ?: "未填写",
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
     }
@@ -1687,57 +1833,31 @@ private fun MainResultDialog(
 
 @Composable
 private fun AveragingResultDialog(
+    input: AveragingDecisionInput,
     result: AveragingDecisionResult,
     symbol: String,
-    onDismiss: () -> Unit,
-    onExpand: () -> Unit
+    onDismiss: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Card(
-            modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp),
+            modifier = Modifier.fillMaxWidth().widthIn(max = 400.dp).heightIn(max = 660.dp),
             shape = MaterialTheme.shapes.medium,
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.28f))
         ) {
             Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.padding(14.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("补仓计算完成", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                MetricTile(
-                    label = "目标价收益变化",
-                    value = "${pnlText(result.pnlChange, DecimalFormatters.formatPositiveNegative(result.pnlChange))} USDT",
-                    valueColor = pnlColor(result.pnlChange),
-                    highlight = true
-                )
-                InputRow {
-                    MetricTile(
-                        label = "补仓后均价",
-                        value = "${DecimalFormatters.formatCurrency(result.newAveragePrice)} USDT",
-                        modifier = Modifier.weight(1f)
-                    )
-                    MetricTile(
-                        label = "补仓后仓位",
-                        value = "${DecimalFormatters.formatQuantity(result.newQuantity)} $symbol",
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                MetricTile(
-                    label = "补仓前后收益差异",
-                    value = "${DecimalFormatters.formatPositiveNegative(result.pnlAfterAdding)} - ${DecimalFormatters.formatPositiveNegative(result.pnlWithoutAdding)} = ${DecimalFormatters.formatPositiveNegative(result.pnlChange)} USDT",
-                    valueColor = pnlColor(result.pnlChange)
-                )
-                MetricTile(
-                    label = "补仓风险变化",
-                    value = "未纳入本次模拟",
-                    supporting = "补仓决策未输入强平计算所需的完整保证金与账户资金参数"
-                )
-                Row(
+                Text("补仓计算完成", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                AveragingDecisionResultCard(result, symbol)
+                AveragingInputDetails(input, symbol)
+                Button(
+                    onClick = onDismiss,
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+                    shape = MaterialTheme.shapes.small
                 ) {
-                    TextButton(onClick = onDismiss) { Text("关闭") }
-                    Button(onClick = onExpand, shape = MaterialTheme.shapes.small) { Text("展开详情") }
+                    Text("关闭")
                 }
             }
         }
@@ -1745,33 +1865,53 @@ private fun AveragingResultDialog(
 }
 
 @Composable
+private fun AveragingInputDetails(input: AveragingDecisionInput, symbol: String) {
+    SectionPanel(title = "补仓参数") {
+        Text(input.side.label(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        InputRow {
+            MetricTile("当前均价", "${DecimalFormatters.formatCurrency(input.currentEntryPrice)} USDT", modifier = Modifier.weight(1f))
+            MetricTile("当前 $symbol 数量", "${DecimalFormatters.formatQuantity(input.currentQuantity)} $symbol", modifier = Modifier.weight(1f))
+        }
+        InputRow {
+            MetricTile("当前保证金", "${DecimalFormatters.formatCurrency(input.currentMargin)} USDT", modifier = Modifier.weight(1f))
+            MetricTile("当前杠杆", "${DecimalFormatters.formatQuantity(input.currentLeverage)}x", modifier = Modifier.weight(1f))
+        }
+        InputRow {
+            MetricTile("补仓价格", "${DecimalFormatters.formatCurrency(input.addEntryPrice)} USDT", modifier = Modifier.weight(1f))
+            MetricTile("目标平仓价", "${DecimalFormatters.formatCurrency(input.targetExitPrice)} USDT", modifier = Modifier.weight(1f))
+        }
+        MetricTile(
+            label = if (input.addAmount != null) "补仓金额" else "补仓 $symbol 数量",
+            value = input.addAmount?.let { "${DecimalFormatters.formatCurrency(it)} USDT" }
+                ?: "${DecimalFormatters.formatQuantity(input.addQuantity)} $symbol"
+        )
+    }
+}
+
+@Composable
 private fun ComparisonResultDialog(
     schemes: List<ComparisonSchemeView>,
-    onDismiss: () -> Unit,
-    onExpand: () -> Unit
+    onDismiss: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Card(
-            modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp),
+            modifier = Modifier.fillMaxWidth().widthIn(max = 400.dp).heightIn(max = 660.dp),
             shape = MaterialTheme.shapes.medium,
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.28f))
         ) {
             Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.padding(14.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("收益对比完成", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                rankComparisonSchemes(schemes).forEach { scheme ->
-                    ComparisonSchemeSummary(scheme)
-                }
-                ComparisonDifferenceSummary(schemes)
-                Row(
+                Text("收益对比完成", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                ComparisonResultsOverview(schemes)
+                Button(
+                    onClick = onDismiss,
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+                    shape = MaterialTheme.shapes.small
                 ) {
-                    TextButton(onClick = onDismiss) { Text("关闭") }
-                    Button(onClick = onExpand, shape = MaterialTheme.shapes.small) { Text("展开详情") }
+                    Text("关闭")
                 }
             }
         }
@@ -1791,12 +1931,12 @@ private fun MissingParametersDialog(
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
         ) {
             Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
                     text = "补仓参数未填写完整",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
@@ -1806,7 +1946,7 @@ private fun MissingParametersDialog(
                 )
                 Button(
                     onClick = onDismiss,
-                    modifier = Modifier.align(Alignment.End),
+                    modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.small
                 ) {
                     Text("知道了")
@@ -1829,22 +1969,22 @@ private fun OperationRequirementDialog(
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.24f))
         ) {
             Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
                     text = "暂时无法操作",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
                     text = message,
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Button(
                     onClick = onDismiss,
-                    modifier = Modifier.align(Alignment.End),
+                    modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.small
                 ) {
                     Text("知道了")
@@ -1855,23 +1995,36 @@ private fun OperationRequirementDialog(
 }
 
 @Composable
-private fun CollapsedMainResult(result: CalculationResult) {
-    MetricTile(
-        label = "净盈亏 · ROI",
-        value = "${pnlText(result.netPnl, DecimalFormatters.formatPositiveNegative(result.netPnl))} USDT · ${DecimalFormatters.formatPercentage(result.roiPercent)}",
-        valueColor = pnlColor(result.netPnl),
-        highlight = true
-    )
-}
-
-@Composable
-private fun CollapsedAveragingResult(result: AveragingDecisionResult) {
-    MetricTile(
-        label = "目标价收益变化",
-        value = "${pnlText(result.pnlChange, DecimalFormatters.formatPositiveNegative(result.pnlChange))} USDT",
-        valueColor = pnlColor(result.pnlChange),
-        highlight = true
-    )
+private fun CompactExpandableResultCard(
+    label: String,
+    value: String,
+    valueColor: Color,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick),
+        shape = MaterialTheme.shapes.small,
+        color = valueColor.copy(alpha = 0.10f),
+        border = BorderStroke(1.dp, valueColor.copy(alpha = 0.38f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = valueColor)
+            }
+            Text(
+                "展开",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
 }
 
 @Composable
@@ -1885,21 +2038,40 @@ private fun AveragingDecisionResultCard(result: AveragingDecisionResult, symbol:
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text("模拟结果", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(
-                text = "目标价收益变化",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = "${pnlText(result.pnlChange, DecimalFormatters.formatPositiveNegative(result.pnlChange))} USDT",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = changeColor
-            )
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.medium,
+                color = changeColor.copy(alpha = 0.16f),
+                border = BorderStroke(2.dp, changeColor.copy(alpha = 0.58f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "目标价收益变化",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = changeColor
+                    )
+                    Text(
+                        text = "${pnlText(result.pnlChange, DecimalFormatters.formatPositiveNegative(result.pnlChange))} USDT",
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = changeColor
+                    )
+                    Text(
+                        text = if (result.pnlChange >= BigDecimal.ZERO) "补仓后目标价收益更高" else "补仓后目标价收益降低",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 MetricTile(
                     label = "新平均开仓价",
@@ -1926,12 +2098,6 @@ private fun AveragingDecisionResultCard(result: AveragingDecisionResult, symbol:
                     modifier = Modifier.weight(1f)
                 )
             }
-            MetricTile(
-                label = "补仓影响分析",
-                value = "收益 ${pnlText(result.pnlChange, DecimalFormatters.formatPositiveNegative(result.pnlChange))} USDT",
-                supporting = "${if (result.averagePriceImprovement >= BigDecimal.ZERO) "均价改善" else "均价变差"} ${DecimalFormatters.formatCurrency(result.averagePriceImprovement.abs())} USDT · $symbol 增加 ${DecimalFormatters.formatQuantity(result.quantityIncrease)} · 补仓金额 ${DecimalFormatters.formatCurrency(result.addAmount)} USDT",
-                valueColor = changeColor
-            )
             Text(
                 text = "收益按目标平仓价估算，未扣手续费；结果仅供比较，不构成投资建议。",
                 style = MaterialTheme.typography.labelMedium,
@@ -1944,10 +2110,7 @@ private fun AveragingDecisionResultCard(result: AveragingDecisionResult, symbol:
 @Composable
 fun ResultCard(
     result: CalculationResult,
-    symbol: String = "币",
-    marginMode: MarginMode = MarginMode.Isolated,
-    totalFunds: BigDecimal? = null,
-    onTotalFundsChange: ((BigDecimal?) -> Unit)? = null
+    symbol: String = "币"
 ) {
     val palette = LocalProfitLossPalette.current
     val netPnl = result.netPnl
@@ -1962,30 +2125,10 @@ fun ResultCard(
         border = BorderStroke(2.dp, resultAccent.copy(alpha = 0.42f))
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            MetricTile(
-                label = "仓位价值",
-                value = "${DecimalFormatters.formatCurrency(result.positionValue)} USDT",
-                modifier = Modifier.weight(1f)
-            )
-            MetricTile(
-                label = "投入保证金",
-                value = "${DecimalFormatters.formatCurrency(result.requiredMargin)} USDT",
-                modifier = Modifier.weight(1f)
-            )
-        }
-        MetricTile(
-            label = "$symbol 数量",
-            value = "${DecimalFormatters.formatQuantity(result.quantity)} $symbol"
-        )
-
-        Surface(
+            Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.small,
             color = resultBackground,
@@ -1993,8 +2136,8 @@ fun ResultCard(
             border = BorderStroke(1.dp, resultAccent.copy(alpha = 0.36f))
         ) {
             Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
                     text = when {
@@ -2024,6 +2167,11 @@ fun ResultCard(
                 )
             }
         }
+        Text(
+            text = "核心结果",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
         if (result.liquidationPrice != null) {
             RiskLevelCard(distancePercent = result.distanceToLiquidationPercent)
             MetricTile(
@@ -2039,20 +2187,7 @@ fun ResultCard(
         } else {
             MetricTile(
                 label = "全仓强平价与风险",
-                value = "无法可靠估算",
-                supporting = "缺少账户余额、其他仓位与交易所阶梯维持保证金信息"
-            )
-        }
-        if (marginMode == MarginMode.Cross && onTotalFundsChange != null) {
-            NumberInput(
-                value = totalFunds,
-                onValueChange = onTotalFundsChange,
-                label = "总资金（可选）"
-            )
-            Text(
-                text = "填写或修改后将重新估算全仓强平价。真实结果仍以交易所数据为准。",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                value = "无法可靠估算"
             )
         }
         Row(
@@ -2060,14 +2195,21 @@ fun ResultCard(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             MetricTile(
-                label = "未扣手续费盈亏",
-                value = "${DecimalFormatters.formatCurrency(result.grossPnl)} USDT",
+                label = "开仓手续费约",
+                value = "${DecimalFormatters.formatCurrency(result.openFee)} USDT",
                 modifier = Modifier.weight(1f)
             )
             MetricTile(
-                label = "总手续费约",
-                value = "${DecimalFormatters.formatCurrency(result.totalFee)} USDT",
+                label = "平仓手续费约",
+                value = "${DecimalFormatters.formatCurrency(result.closeFee)} USDT",
                 modifier = Modifier.weight(1f)
+            )
+        }
+        result.distanceToLiquidationPercent?.let {
+            MetricTile(
+                label = "距离估算强平价",
+                value = DecimalFormatters.formatPercentage(it),
+                valueColor = WarningAmber
             )
         }
         val hasTargetOrStop = result.targetProfitPriceByAmount != null ||
@@ -2244,6 +2386,8 @@ private data class ComparisonSchemeView(
     val name: String,
     val symbol: String,
     val coin: CoinAsset?,
+    val settlementMode: SettlementMode,
+    val coinMarginedCalculationMode: CoinMarginedCalculationMode,
     val input: CalculationInput,
     val result: CalculationResult?,
     val isMain: Boolean
@@ -2253,6 +2397,8 @@ private fun buildComparisonSchemes(
     mainInput: CalculationInput,
     mainResult: CalculationResult?,
     mainSymbol: String,
+    mainSettlementMode: SettlementMode,
+    mainCoinMarginedCalculationMode: CoinMarginedCalculationMode,
     items: List<ComparisonItem>,
     results: List<ComparisonResult>,
     coins: List<CoinAsset>
@@ -2263,6 +2409,8 @@ private fun buildComparisonSchemes(
             "主方案",
             mainSymbol,
             coins.firstOrNull { it.symbol == mainSymbol },
+            mainSettlementMode,
+            mainCoinMarginedCalculationMode,
             mainInput,
             mainResult,
             true
@@ -2275,12 +2423,40 @@ private fun buildComparisonSchemes(
                 name = item.name,
                 symbol = coins.firstOrNull { it.id == item.coinId }?.symbol ?: "币",
                 coin = coins.firstOrNull { it.id == item.coinId },
+                settlementMode = item.settlementMode,
+                coinMarginedCalculationMode = item.coinMarginedCalculationMode,
                 input = item.input,
                 result = results.firstOrNull { it.item.id == item.id }?.result,
                 isMain = false
             )
         )
     }
+}
+
+private fun settlementModeLabel(mode: SettlementMode): String = when (mode) {
+    SettlementMode.UsdtMargined -> "U 本位"
+    SettlementMode.CoinMargined -> "币本位"
+}
+
+private fun coinMarginedCalculationModeShortLabel(mode: CoinMarginedCalculationMode): String = when (mode) {
+    CoinMarginedCalculationMode.CoinQuantity -> "币数量"
+    CoinMarginedCalculationMode.InverseContract -> "反向合约"
+}
+
+private fun comparisonSettlementDisplay(
+    settlementMode: SettlementMode,
+    coinMarginedCalculationMode: CoinMarginedCalculationMode
+): String = when (settlementMode) {
+    SettlementMode.UsdtMargined -> settlementModeLabel(settlementMode)
+    SettlementMode.CoinMargined -> "${settlementModeLabel(settlementMode)}(${coinMarginedCalculationModeShortLabel(coinMarginedCalculationMode)})"
+}
+
+private fun comparisonSettlementHistoryDisplay(
+    settlementMode: SettlementMode,
+    coinMarginedCalculationMode: CoinMarginedCalculationMode
+): String = when (settlementMode) {
+    SettlementMode.UsdtMargined -> settlementModeLabel(settlementMode)
+    SettlementMode.CoinMargined -> "${settlementModeLabel(settlementMode)}（${coinMarginedCalculationModeShortLabel(coinMarginedCalculationMode)}）"
 }
 
 private fun selectedComparisonValidationMessage(schemes: List<ComparisonSchemeView>): String? {
@@ -2305,9 +2481,7 @@ private fun ComparisonSchemeListCard(
 ) {
     val result = scheme.result
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.small,
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
@@ -2325,26 +2499,9 @@ private fun ComparisonSchemeListCard(
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold
                 )
-                Text(
-                    text = "${scheme.input.side.label()} · ${scheme.input.marginMode.label()} · ${scheme.input.leverage.stripTrailingZeros().toPlainString()}x",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "${DecimalFormatters.formatCurrency(scheme.input.entryPrice)} → ${DecimalFormatters.formatCurrency(scheme.input.exitPrice)} USDT",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = scheme.input.margin?.let { "保证金 ${DecimalFormatters.formatCurrency(it)} USDT" }
-                        ?: scheme.input.quantity?.let { "数量 ${DecimalFormatters.formatQuantity(it)} ${scheme.symbol}" }
-                        ?: "保证金或数量未填写",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
                 if (result?.netPnl != null) {
                     Text(
-                        text = "净收益 ${pnlText(result.netPnl, DecimalFormatters.formatPositiveNegative(result.netPnl))} USDT · ROI ${DecimalFormatters.formatPercentage(result.roiPercent)}",
+                        text = "净收益 ${pnlText(result.netPnl, DecimalFormatters.formatPositiveNegative(result.netPnl))} USDT",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.SemiBold,
                         color = pnlColor(result.netPnl)
@@ -2356,9 +2513,21 @@ private fun ComparisonSchemeListCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                Text(
+                    text = "${scheme.symbol} | ${comparisonSettlementDisplay(scheme.settlementMode, scheme.coinMarginedCalculationMode)} | ${scheme.input.side.label()}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-            if (!scheme.isMain) {
-                Text("编辑", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            Column(horizontalAlignment = Alignment.End) {
+                if (!scheme.isMain && onClick != null) {
+                    TextButton(
+                        onClick = onClick,
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Text("编辑", fontWeight = FontWeight.SemiBold)
+                    }
+                }
             }
         }
     }
@@ -2374,6 +2543,8 @@ private fun ComparisonSchemeEditorDialog(
 ) {
     var item by remember(initialItem.id) { mutableStateOf(initialItem) }
     var showCoinDialog by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val coin = coins.firstOrNull { it.id == item.coinId }
     if (showCoinDialog) {
         ComparisonCoinSelectorDialog(
@@ -2388,25 +2559,24 @@ private fun ComparisonSchemeEditorDialog(
     }
     Dialog(onDismissRequest = onDismiss) {
         Card(
-            modifier = Modifier.fillMaxWidth().widthIn(max = 480.dp).heightIn(max = 720.dp),
+            modifier = Modifier.fillMaxWidth().widthIn(max = 400.dp).heightIn(max = 660.dp),
             shape = MaterialTheme.shapes.medium,
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(
-                modifier = Modifier.padding(18.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.padding(14.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
                     text = if (initialItem.input == CalculationInput()) "添加对比方案" else "编辑对比方案",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-                OutlinedTextField(
+                CompactTextInput(
                     value = item.name,
                     onValueChange = { item = item.copy(name = it) },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("方案名称") },
-                    singleLine = true
+                    modifier = Modifier.widthIn(max = 220.dp),
+                    label = "方案名称"
                 )
                 SoftOutlinedButton(onClick = { showCoinDialog = true }, modifier = Modifier.fillMaxWidth()) {
                     Row(
@@ -2417,16 +2587,55 @@ private fun ComparisonSchemeEditorDialog(
                         Text("币种：${coin?.symbol ?: "请选择"}")
                     }
                 }
+                Text("结算模式", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TwoOptionModeSelector(
+                    firstText = "U 本位",
+                    secondText = "币本位",
+                    firstSelected = item.settlementMode == SettlementMode.UsdtMargined,
+                    onFirstClick = { item = item.copy(settlementMode = SettlementMode.UsdtMargined) },
+                    onSecondClick = { item = item.copy(settlementMode = SettlementMode.CoinMargined) }
+                )
+                if (item.settlementMode == SettlementMode.CoinMargined) {
+                    Text("币本位计算方式", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    CoinMarginedModeOption(
+                        mode = CoinMarginedCalculationMode.CoinQuantity,
+                        selectedMode = item.coinMarginedCalculationMode,
+                        onSelect = { item = item.copy(coinMarginedCalculationMode = it) }
+                    )
+                    CoinMarginedModeOption(
+                        mode = CoinMarginedCalculationMode.InverseContract,
+                        selectedMode = item.coinMarginedCalculationMode,
+                        onSelect = { item = item.copy(coinMarginedCalculationMode = it) }
+                    )
+                }
                 PositionSideSelector(item.input.side, { item = item.copy(input = item.input.copy(side = it)) })
                 MarginModeSelector(item.input.marginMode, { item = item.copy(input = item.input.copy(marginMode = it)) })
                 LeverageSelector(item.input.leverage, { item = item.copy(input = item.input.copy(leverage = it)) })
-                InputRow {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     NumberInput(
                         value = item.input.margin,
                         onValueChange = { item = item.copy(input = item.input.copy(margin = it, quantity = null), lastEditedAmountField = AmountField.Margin) },
                         label = "保证金",
                         modifier = Modifier.weight(1f)
                     )
+                    Column(
+                        modifier = Modifier.width(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Box(modifier = Modifier.height(40.dp), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = "或",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
                     NumberInput(
                         value = item.input.quantity,
                         onValueChange = { item = item.copy(input = item.input.copy(quantity = it, margin = null), lastEditedAmountField = AmountField.Quantity) },
@@ -2452,10 +2661,17 @@ private fun ComparisonSchemeEditorDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
                 ) {
-                    TextButton(onClick = { onDelete(item) }) { Text("删除") }
-                    TextButton(onClick = onDismiss) { Text("取消") }
+                    TextButton(
+                        onClick = { onDelete(item) },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) { Text("删除", fontWeight = FontWeight.SemiBold) }
+                    TextButton(onClick = onDismiss) { Text("取消", fontWeight = FontWeight.SemiBold) }
                     Button(
-                        onClick = { onSave(item.copy(name = item.name.ifBlank { "未命名方案" })) },
+                        onClick = {
+                            focusManager.clearFocus(force = true)
+                            keyboardController?.hide()
+                            onSave(item.copy(name = item.name.ifBlank { "未命名方案" }))
+                        },
                         shape = MaterialTheme.shapes.small
                     ) { Text("保存") }
                 }
@@ -2512,8 +2728,11 @@ fun ComparisonItemCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                TextButton(onClick = onRemove) {
-                    Text("删除")
+                TextButton(
+                    onClick = onRemove,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("删除", fontWeight = FontWeight.SemiBold)
                 }
             }
             SoftOutlinedButton(
@@ -2635,10 +2854,10 @@ private fun ComparisonCoinSelectorDialog(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("选择方案币种", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("选择方案币种", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 OutlinedTextField(
                     value = search,
                     onValueChange = { search = it },
@@ -2647,8 +2866,8 @@ private fun ComparisonCoinSelectorDialog(
                     singleLine = true
                 )
                 LazyColumn(
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     items(filtered, key = { it.id }) { coin ->
                         Surface(
@@ -2661,7 +2880,7 @@ private fun ComparisonCoinSelectorDialog(
                             }
                         ) {
                             Row(
-                                modifier = Modifier.fillMaxWidth().padding(10.dp),
+                                modifier = Modifier.fillMaxWidth().padding(8.dp),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -2672,7 +2891,7 @@ private fun ComparisonCoinSelectorDialog(
                     }
                 }
                 TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
-                    Text("取消")
+                    Text("取消", fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -2690,33 +2909,38 @@ private fun ComparisonResultsOverview(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.32f))
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "收益对比结果",
+                text = "收益差距",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            ComparisonDifferenceSummary(schemes)
+            Text(
+                text = "方案详情",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "不同币种统一使用 USDT 比较，不比较币数量。",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             rankComparisonSchemes(schemes).forEach { scheme ->
                 ComparisonSchemeSummary(scheme)
             }
-            ComparisonDifferenceSummary(schemes)
         }
     }
 }
 
 private data class RankedComparisonScheme(
+    val id: String,
     val netRank: Int?,
     val roiRank: Int?,
     val name: String,
     val symbol: String,
     val coin: CoinAsset?,
+    val settlementMode: SettlementMode,
+    val coinMarginedCalculationMode: CoinMarginedCalculationMode,
+    val input: CalculationInput,
     val result: CalculationResult?
 )
 
@@ -2730,7 +2954,18 @@ private fun rankComparisonSchemes(schemes: List<ComparisonSchemeView>): List<Ran
         .mapIndexed { index, scheme -> scheme.id to index + 1 }
         .toMap()
     return schemes.map {
-        RankedComparisonScheme(netRanks[it.id], roiRanks[it.id], it.name, it.symbol, it.coin, it.result)
+        RankedComparisonScheme(
+            it.id,
+            netRanks[it.id],
+            roiRanks[it.id],
+            it.name,
+            it.symbol,
+            it.coin,
+            it.settlementMode,
+            it.coinMarginedCalculationMode,
+            it.input,
+            it.result
+        )
     }
 }
 
@@ -2751,6 +2986,7 @@ private fun ComparisonDifferenceSummary(schemes: List<ComparisonSchemeView>) {
 
 @Composable
 private fun ComparisonSchemeSummary(scheme: RankedComparisonScheme) {
+    var expanded by rememberSaveable(scheme.id) { mutableStateOf(false) }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.small,
@@ -2772,42 +3008,99 @@ private fun ComparisonSchemeSummary(scheme: RankedComparisonScheme) {
                 ) {
                     CoinIcon(coin = scheme.coin, size = 28)
                     Text(
-                        text = "${scheme.name} · ${scheme.symbol}",
+                        text = "${scheme.name} · ${scheme.symbol} · ${comparisonSettlementHistoryDisplay(scheme.settlementMode, scheme.coinMarginedCalculationMode)}",
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
+                TextButton(
+                    onClick = { expanded = !expanded },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Text(if (expanded) "收起" else "展开", fontWeight = FontWeight.Bold)
+                }
+            }
+            MetricTile(
+                label = scheme.netRank?.let { "净收益排名 #$it" } ?: "净收益",
+                value = "${pnlText(scheme.result?.netPnl, DecimalFormatters.formatPositiveNegative(scheme.result?.netPnl))} USDT",
+                valueColor = pnlColor(scheme.result?.netPnl)
+            )
+            Text(
+                text = "${scheme.symbol} | ${comparisonSettlementDisplay(scheme.settlementMode, scheme.coinMarginedCalculationMode)} | ${scheme.input.side.label()}",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (expanded) {
                 Text(
-                    text = scheme.netRank?.let { "净收益 #$it" } ?: "暂无排名",
+                    text = "${scheme.input.side.label()} · ${scheme.input.marginMode.label()} · ${scheme.input.leverage.stripTrailingZeros().toPlainString()}x · ${comparisonSettlementHistoryDisplay(scheme.settlementMode, scheme.coinMarginedCalculationMode)}",
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                InputRow {
+                    MetricTile(
+                        label = "开仓价",
+                        value = "${DecimalFormatters.formatCurrency(scheme.input.entryPrice)} USDT",
+                        modifier = Modifier.weight(1f)
+                    )
+                    MetricTile(
+                        label = "平仓价",
+                        value = "${DecimalFormatters.formatCurrency(scheme.input.exitPrice)} USDT",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                InputRow {
+                    MetricTile(
+                        label = if (scheme.input.margin != null) "保证金" else "${scheme.symbol} 数量",
+                        value = scheme.input.margin?.let { "${DecimalFormatters.formatCurrency(it)} USDT" }
+                            ?: "${DecimalFormatters.formatQuantity(scheme.input.quantity)} ${scheme.symbol}",
+                        modifier = Modifier.weight(1f)
+                    )
+                    MetricTile(
+                        label = "仓位价值",
+                        value = "${DecimalFormatters.formatCurrency(scheme.result?.positionValue)} USDT",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                InputRow {
+                    MetricTile(
+                        label = "ROI",
+                        value = DecimalFormatters.formatPercentage(scheme.result?.roiPercent),
+                        supporting = scheme.roiRank?.let { "ROI 排名 #$it" },
+                        valueColor = pnlColor(scheme.result?.roiPercent),
+                        modifier = Modifier.weight(1f)
+                    )
+                    MetricTile(
+                        label = "总手续费约",
+                        value = "${DecimalFormatters.formatCurrency(scheme.result?.totalFee)} USDT",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                MetricTile(
+                    label = "未扣手续费盈亏",
+                    value = "${DecimalFormatters.formatCurrency(scheme.result?.grossPnl)} USDT",
+                    valueColor = pnlColor(scheme.result?.grossPnl)
+                )
+                MetricTile(
+                    label = "估算强平价",
+                    value = comparisonLiquidationPrice(scheme.input, scheme.result)?.let { "${DecimalFormatters.formatCurrency(it)} USDT" }
+                        ?: "无法可靠估算"
                 )
             }
-            InputRow {
-                MetricTile(
-                    label = "净收益",
-                    value = "${pnlText(scheme.result?.netPnl, DecimalFormatters.formatPositiveNegative(scheme.result?.netPnl))} USDT",
-                    valueColor = pnlColor(scheme.result?.netPnl),
-                    modifier = Modifier.weight(1f)
-                )
-                MetricTile(
-                    label = "ROI",
-                    value = DecimalFormatters.formatPercentage(scheme.result?.roiPercent),
-                    supporting = scheme.roiRank?.let { "ROI 排名 #$it" },
-                    valueColor = pnlColor(scheme.result?.roiPercent),
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            MetricTile(
-                label = "总手续费约",
-                value = "${DecimalFormatters.formatCurrency(scheme.result?.totalFee)} USDT"
-            )
-            MetricTile(
-                label = "估算强平价",
-                value = scheme.result?.liquidationPrice?.let { "${DecimalFormatters.formatCurrency(it)} USDT" }
-                    ?: "无法可靠估算"
-            )
         }
+    }
+}
+
+private fun comparisonLiquidationPrice(input: CalculationInput, result: CalculationResult?): BigDecimal? {
+    if (result?.liquidationPrice != null) return result.liquidationPrice
+    val entryPrice = input.entryPrice ?: return null
+    val leverage = input.leverage.takeIf { it > BigDecimal.ZERO } ?: return null
+    val maintenanceRate = input.maintenanceMarginRatePercent.divide(BigDecimal("100"))
+    val initialMarginRate = BigDecimal.ONE.divide(leverage, 18, RoundingMode.HALF_UP)
+    return when (input.side) {
+        PositionSide.Long -> entryPrice.multiply(BigDecimal.ONE - initialMarginRate + maintenanceRate)
+            .takeIf { it > BigDecimal.ZERO }
+        PositionSide.Short -> entryPrice.multiply(BigDecimal.ONE + initialMarginRate - maintenanceRate)
+            .takeIf { it > BigDecimal.ZERO }
     }
 }
 
@@ -2821,23 +3114,24 @@ private fun ComparisonFormulaCard(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.16f))
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f),
+        border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.72f))
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text(text = title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
                 text = "${DecimalFormatters.formatCurrency(leftPnl)} - ${DecimalFormatters.formatCurrency(rightPnl)} = ${pnlText(diff, DecimalFormatters.formatPositiveNegative(diff))} USDT",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
             )
             Text(
                 text = summary,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = pnlColor(diff)
             )
@@ -2968,6 +3262,8 @@ private fun createComparisonHistorySnapshot(schemes: List<ComparisonSchemeView>)
         savedAt = System.currentTimeMillis(),
         sections = schemes.map { scheme ->
             HistorySection("${scheme.name} · ${scheme.symbol}", listOf(
+                HistoryField("结算模式", comparisonSettlementHistoryDisplay(scheme.settlementMode, scheme.coinMarginedCalculationMode)),
+                HistoryField("币本位计算方式", if (scheme.settlementMode == SettlementMode.CoinMargined) scheme.coinMarginedCalculationMode.label else "不适用"),
                 HistoryField("方向", scheme.input.side.label()),
                 HistoryField("模式", scheme.input.marginMode.label()),
                 HistoryField("杠杆", "${scheme.input.leverage.stripTrailingZeros().toPlainString()}x"),
@@ -3031,6 +3327,13 @@ private fun HistoryScreen(
     var category by rememberSaveable { mutableStateOf<HistoryCategory?>(null) }
     var selectedRecord by remember { mutableStateOf<HistoryRecord?>(null) }
     var selectedIds by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    BackHandler {
+        if (selectedRecord != null) {
+            selectedRecord = null
+        } else {
+            onBack()
+        }
+    }
     selectedRecord?.let { record ->
         HistoryDetailScreen(
             record = records.firstOrNull { it.id == record.id } ?: record,
@@ -3158,17 +3461,27 @@ private fun SettingsScreen(
     onPnlDisplayModeChange: (PnlDisplayMode) -> Unit,
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
+    coinMarginedCalculationMode: CoinMarginedCalculationMode,
+    onCoinMarginedCalculationModeChange: (CoinMarginedCalculationMode) -> Unit,
     moduleOrder: List<HomeModule>,
     visibleModules: Set<HomeModule>,
     onModuleOrderChange: (List<HomeModule>) -> Unit,
     onResetModuleOrder: () -> Unit,
     onModuleVisibilityChange: (HomeModule, Boolean) -> Unit,
+    onResetModuleVisibility: () -> Unit,
     feedbackText: String,
     onFeedbackChange: (String) -> Unit,
     priceUpdatedAt: Long?,
     onBack: () -> Unit
 ) {
     var page by rememberSaveable { mutableStateOf(SettingsPage.Main) }
+    BackHandler {
+        if (page == SettingsPage.Main) {
+            onBack()
+        } else {
+            page = SettingsPage.Main
+        }
+    }
 
     when (page) {
         SettingsPage.Feedback -> FeedbackScreen(
@@ -3191,13 +3504,25 @@ private fun SettingsScreen(
         SettingsPage.ModuleVisibility -> ModuleVisibilityScreen(
             visibleModules = visibleModules,
             onVisibilityChange = onModuleVisibilityChange,
+            onReset = onResetModuleVisibility,
+            onBack = { page = SettingsPage.Main }
+        )
+        SettingsPage.AppTheme -> AppThemeScreen(
+            themeMode = themeMode,
+            onThemeModeChange = onThemeModeChange,
+            onBack = { page = SettingsPage.Main }
+        )
+        SettingsPage.CoinMarginedMode -> CoinMarginedModeSettingsScreen(
+            mode = coinMarginedCalculationMode,
+            onModeChange = onCoinMarginedCalculationModeChange,
+            onBack = { page = SettingsPage.Main }
+        )
+        SettingsPage.PnlColor -> PnlColorScreen(
+            pnlDisplayMode = pnlDisplayMode,
+            onPnlDisplayModeChange = onPnlDisplayModeChange,
             onBack = { page = SettingsPage.Main }
         )
         SettingsPage.Main -> SettingsHome(
-            pnlDisplayMode = pnlDisplayMode,
-            onPnlDisplayModeChange = onPnlDisplayModeChange,
-            themeMode = themeMode,
-            onThemeModeChange = onThemeModeChange,
             onOpenPage = { page = it },
             onBack = onBack
         )
@@ -3212,6 +3537,9 @@ private enum class SettingsPage {
     Disclaimer,
     ModuleOrder,
     ModuleVisibility,
+    AppTheme,
+    CoinMarginedMode,
+    PnlColor,
 }
 
 private enum class PnlDisplayMode {
@@ -3222,10 +3550,6 @@ private enum class PnlDisplayMode {
 
 @Composable
 private fun SettingsHome(
-    pnlDisplayMode: PnlDisplayMode,
-    onPnlDisplayModeChange: (PnlDisplayMode) -> Unit,
-    themeMode: ThemeMode,
-    onThemeModeChange: (ThemeMode) -> Unit,
     onOpenPage: (SettingsPage) -> Unit,
     onBack: () -> Unit
 ) {
@@ -3245,56 +3569,9 @@ private fun SettingsHome(
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
             )
-            SectionPanel(title = "App 主题") {
-                Text(
-                    text = "选择界面明暗模式，设置会保存在本地。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    ThemeModeButton("跟随系统", ThemeMode.System, themeMode, onThemeModeChange, Modifier.weight(1f))
-                    ThemeModeButton("浅色", ThemeMode.Light, themeMode, onThemeModeChange, Modifier.weight(1f))
-                    ThemeModeButton("深色", ThemeMode.Dark, themeMode, onThemeModeChange, Modifier.weight(1f))
-                }
-            }
-            SectionPanel(title = "盈利亏损配色") {
-                Text(
-                    text = "配色仅应用于盈亏结果，交易方向统一使用主题色。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    ColorModeButton(
-                        text = "盈利绿 · 亏损红",
-                        selected = pnlDisplayMode == PnlDisplayMode.ProfitGreen,
-                        profitColor = ProfitGreen,
-                        lossColor = LossRed,
-                        onClick = { onPnlDisplayModeChange(PnlDisplayMode.ProfitGreen) }
-                    )
-                    ColorModeButton(
-                        text = "盈利红 · 亏损绿",
-                        selected = pnlDisplayMode == PnlDisplayMode.ProfitRed,
-                        profitColor = LossRed,
-                        lossColor = ProfitGreen,
-                        onClick = { onPnlDisplayModeChange(PnlDisplayMode.ProfitRed) }
-                    )
-                    ColorModeButton(
-                        text = "仅图标区分",
-                        selected = pnlDisplayMode == PnlDisplayMode.IconsOnly,
-                        profitColor = MaterialTheme.colorScheme.onSurface,
-                        lossColor = MaterialTheme.colorScheme.onSurface,
-                        profitIndicator = "▲ ",
-                        lossIndicator = "▼ ",
-                        onClick = { onPnlDisplayModeChange(PnlDisplayMode.IconsOnly) }
-                    )
-                }
-            }
+            SettingsMenuButton("App 主题", "选择界面明暗模式") { onOpenPage(SettingsPage.AppTheme) }
+            SettingsMenuButton("币本位计算方式", "选择币数量模式或反向合约模式") { onOpenPage(SettingsPage.CoinMarginedMode) }
+            SettingsMenuButton("盈利亏损配色", "设置盈亏结果颜色与图标显示") { onOpenPage(SettingsPage.PnlColor) }
             SettingsMenuButton("首页模块排序", "长按拖动调整首页功能顺序") { onOpenPage(SettingsPage.ModuleOrder) }
             SettingsMenuButton("模块显示管理", "开启或关闭首页功能模块") { onOpenPage(SettingsPage.ModuleVisibility) }
             SettingsMenuButton("用户反馈", "提交建议并创建 GitHub Issue") { onOpenPage(SettingsPage.Feedback) }
@@ -3308,6 +3585,190 @@ private fun SettingsHome(
             ) {
                 Text("返回计算器")
             }
+        }
+    }
+}
+
+@Composable
+private fun AppThemeScreen(
+    themeMode: ThemeMode,
+    onThemeModeChange: (ThemeMode) -> Unit,
+    onBack: () -> Unit
+) {
+    SettingsPageLayout(title = "App 主题", onBack = onBack) {
+        SectionPanel(title = "明暗模式") {
+            Text(
+                text = "选择界面明暗模式，设置会保存在本地。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ThemeModeButton("跟随系统", ThemeMode.System, themeMode, onThemeModeChange, Modifier.weight(1f))
+                ThemeModeButton("浅色", ThemeMode.Light, themeMode, onThemeModeChange, Modifier.weight(1f))
+                ThemeModeButton("深色", ThemeMode.Dark, themeMode, onThemeModeChange, Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun PnlColorScreen(
+    pnlDisplayMode: PnlDisplayMode,
+    onPnlDisplayModeChange: (PnlDisplayMode) -> Unit,
+    onBack: () -> Unit
+) {
+    SettingsPageLayout(title = "盈利亏损配色", onBack = onBack) {
+        SectionPanel(title = "结果配色") {
+            Text(
+                text = "配色仅应用于盈亏结果，交易方向统一使用主题色。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ColorModeButton(
+                    text = "盈利绿 · 亏损红",
+                    selected = pnlDisplayMode == PnlDisplayMode.ProfitGreen,
+                    profitColor = ProfitGreen,
+                    lossColor = LossRed,
+                    onClick = { onPnlDisplayModeChange(PnlDisplayMode.ProfitGreen) }
+                )
+                ColorModeButton(
+                    text = "盈利红 · 亏损绿",
+                    selected = pnlDisplayMode == PnlDisplayMode.ProfitRed,
+                    profitColor = LossRed,
+                    lossColor = ProfitGreen,
+                    onClick = { onPnlDisplayModeChange(PnlDisplayMode.ProfitRed) }
+                )
+                ColorModeButton(
+                    text = "仅图标区分",
+                    selected = pnlDisplayMode == PnlDisplayMode.IconsOnly,
+                    profitColor = MaterialTheme.colorScheme.onSurface,
+                    lossColor = MaterialTheme.colorScheme.onSurface,
+                    profitIndicator = "▲ ",
+                    lossIndicator = "▼ ",
+                    onClick = { onPnlDisplayModeChange(PnlDisplayMode.IconsOnly) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CoinMarginedModeSettingsScreen(
+    mode: CoinMarginedCalculationMode,
+    onModeChange: (CoinMarginedCalculationMode) -> Unit,
+    onBack: () -> Unit
+) {
+    SettingsPageLayout(title = "币本位计算方式", onBack = onBack) {
+        SectionPanel(title = "计算模式") {
+            Text(
+                text = "币本位支持按持仓币数量计算，也支持反向合约公式。设置会保存在本地。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            CoinMarginedModeOption(
+                mode = CoinMarginedCalculationMode.CoinQuantity,
+                selectedMode = mode,
+                onSelect = onModeChange
+            )
+            CoinMarginedModeOption(
+                mode = CoinMarginedCalculationMode.InverseContract,
+                selectedMode = mode,
+                onSelect = onModeChange
+            )
+        }
+    }
+}
+
+@Composable
+private fun CoinMarginedModeDialog(
+    initialMode: CoinMarginedCalculationMode,
+    onConfirm: (CoinMarginedCalculationMode, Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedMode by rememberSaveable { mutableStateOf(initialMode) }
+    var rememberChoice by rememberSaveable { mutableStateOf(true) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("选择币本位计算方式", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "首次切换到币本位时请选择计算方式，之后也可在设置中修改。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                CoinMarginedModeOption(
+                    mode = CoinMarginedCalculationMode.CoinQuantity,
+                    selectedMode = selectedMode,
+                    onSelect = { selectedMode = it }
+                )
+                CoinMarginedModeOption(
+                    mode = CoinMarginedCalculationMode.InverseContract,
+                    selectedMode = selectedMode,
+                    onSelect = { selectedMode = it }
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Checkbox(checked = rememberChoice, onCheckedChange = { rememberChoice = it })
+                    Text("记住选择，下次不再提示")
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(selectedMode, rememberChoice) }) {
+                Text("确认")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("稍后再选")
+            }
+        }
+    )
+}
+
+@Composable
+private fun CoinMarginedModeOption(
+    mode: CoinMarginedCalculationMode,
+    selectedMode: CoinMarginedCalculationMode,
+    onSelect: (CoinMarginedCalculationMode) -> Unit
+) {
+    val selected = mode == selectedMode
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onSelect(mode) },
+        shape = MaterialTheme.shapes.small,
+        color = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.62f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f)
+        },
+        border = BorderStroke(
+            if (selected) 2.dp else 1.dp,
+            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.16f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(mode.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                mode.shortDescription,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -3356,6 +3817,7 @@ private fun ModuleOrderScreen(
     onBack: () -> Unit
 ) {
     var localOrder by remember(moduleOrder) { mutableStateOf(moduleOrder) }
+    val hapticFeedback = LocalHapticFeedback.current
     SettingsPageLayout(title = "首页模块排序", onBack = onBack) {
         SectionPanel(title = "长按拖动排序") {
             Text(
@@ -3363,37 +3825,64 @@ private fun ModuleOrderScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            localOrder.forEachIndexed { index, module ->
+            localOrder.forEach { module ->
+                key(module) {
                 var dragDistance by remember(module) { mutableStateOf(0f) }
+                var itemHeight by remember(module) { mutableStateOf(0f) }
+                var isDragging by remember(module) { mutableStateOf(false) }
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .pointerInput(localOrder, module) {
+                        .onSizeChanged { itemHeight = it.height.toFloat() }
+                        .offset { IntOffset(0, if (isDragging) dragDistance.roundToInt() else 0) }
+                        .zIndex(if (isDragging) 1f else 0f)
+                        .shadow(if (isDragging) 12.dp else 0.dp, MaterialTheme.shapes.small)
+                        .pointerInput(module) {
                             detectDragGesturesAfterLongPress(
-                                onDragEnd = { dragDistance = 0f },
-                                onDragCancel = { dragDistance = 0f },
+                                onDragStart = {
+                                    isDragging = true
+                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                                },
+                                onDragEnd = {
+                                    isDragging = false
+                                    dragDistance = 0f
+                                },
+                                onDragCancel = {
+                                    isDragging = false
+                                    dragDistance = 0f
+                                },
                                 onDrag = { change, amount ->
                                     change.consume()
                                     dragDistance += amount.y
+                                    val currentIndex = localOrder.indexOf(module)
+                                    val swapDistance = (itemHeight * 0.55f).coerceAtLeast(48f)
                                     val target = when {
-                                        dragDistance > 42f -> index + 1
-                                        dragDistance < -42f -> index - 1
-                                        else -> index
+                                        dragDistance > swapDistance -> currentIndex + 1
+                                        dragDistance < -swapDistance -> currentIndex - 1
+                                        else -> currentIndex
                                     }
-                                    if (target in localOrder.indices && target != index) {
+                                    if (target in localOrder.indices && target != currentIndex) {
                                         val updated = localOrder.toMutableList()
-                                        updated[index] = localOrder[target]
+                                        updated[currentIndex] = localOrder[target]
                                         updated[target] = module
                                         localOrder = updated
                                         onModuleOrderChange(updated)
-                                        dragDistance = 0f
+                                        dragDistance -= if (target > currentIndex) itemHeight else -itemHeight
+                                        hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     }
                                 }
                             )
                         },
                     shape = MaterialTheme.shapes.small,
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
+                    color = if (isDragging) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                    },
+                    border = BorderStroke(
+                        if (isDragging) 2.dp else 1.dp,
+                        if (isDragging) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
+                    )
                 ) {
                     Row(
                         modifier = Modifier.padding(14.dp),
@@ -3401,8 +3890,13 @@ private fun ModuleOrderScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(module.label, fontWeight = FontWeight.SemiBold)
-                        Text("长按拖动", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            if (isDragging) "正在移动" else "长按拖动",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (isDragging) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
+                }
                 }
             }
             SoftOutlinedButton(
@@ -3422,16 +3916,17 @@ private fun ModuleOrderScreen(
 private fun ModuleVisibilityScreen(
     visibleModules: Set<HomeModule>,
     onVisibilityChange: (HomeModule, Boolean) -> Unit,
+    onReset: () -> Unit,
     onBack: () -> Unit
 ) {
     SettingsPageLayout(title = "模块显示管理", onBack = onBack) {
         SectionPanel(title = "首页模块") {
             Text(
-                text = "顶部币种区域、支持作者和底部设置始终显示。",
+                text = "仓位参数、目标与止损、计算结果为核心模块，始终显示。这里只管理收益方案对比、补仓决策模拟和历史记录。",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            HomeModule.entries.forEach { module ->
+            HomeModule.configurableVisibility.forEach { module ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -3443,6 +3938,12 @@ private fun ModuleVisibilityScreen(
                         onCheckedChange = { onVisibilityChange(module, it) }
                     )
                 }
+            }
+            SoftOutlinedButton(
+                onClick = onReset,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("恢复默认显示")
             }
         }
     }
@@ -3492,7 +3993,7 @@ private fun AboutScreen(priceUpdatedAt: Long?, onBack: () -> Unit) {
     val context = LocalContext.current
     val version = appVersion(context)
     SettingsPageLayout(title = "关于 App", onBack = onBack) {
-        SectionPanel(title = "收益计算器") {
+        SectionPanel(title = "仓位助手") {
             DisclaimerParagraph("版本：$version")
             DisclaimerParagraph("用于多币种 U 本位、币本位合约的收益、风险、目标止损、补仓和方案对比估算。")
             DisclaimerParagraph("价格数据来源：CoinGecko 公共 API。")
@@ -3639,6 +4140,7 @@ private fun ColorResultPreview(
 private fun DonationScreen(onBack: () -> Unit) {
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
+    BackHandler(onBack = onBack)
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -3783,7 +4285,7 @@ private fun openFeedbackIssue(context: Context, feedbackText: String) {
         appendLine("- 手机型号：${Build.MANUFACTURER} ${Build.MODEL}")
         appendLine("- 提交时间：$submittedAt")
         appendLine()
-        append("> 此 Issue 由收益计算器反馈页面预填，用户已在 GitHub 页面确认后提交。")
+        append("> 此 Issue 由仓位助手反馈页面预填，用户已在 GitHub 页面确认后提交。")
     }
     val issueUrl = Uri.parse(GITHUB_ISSUE_URL)
         .buildUpon()

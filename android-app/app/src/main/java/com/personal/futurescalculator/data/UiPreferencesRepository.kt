@@ -1,6 +1,7 @@
 package com.personal.futurescalculator.data
 
 import android.content.Context
+import com.personal.futurescalculator.model.CoinMarginedCalculationMode
 import com.personal.futurescalculator.model.HomeModule
 import com.personal.futurescalculator.model.ThemeMode
 
@@ -21,11 +22,14 @@ class UiPreferencesRepository(context: Context) {
 
     fun loadVisibleModules(): Set<HomeModule> {
         val hidden = preferences.getStringSet(KEY_HIDDEN_MODULES, emptySet()).orEmpty()
-        return HomeModule.entries.filterNot { it.name in hidden }.toSet()
+        return HomeModule.entries.filter { module ->
+            module in HomeModule.alwaysVisible || module.name !in hidden
+        }.toSet()
     }
 
     fun saveVisibleModules(modules: Set<HomeModule>) {
-        val hidden = HomeModule.entries.filterNot { it in modules }.map { it.name }.toSet()
+        val visible = modules + HomeModule.alwaysVisible
+        val hidden = HomeModule.configurableVisibility.filterNot { it in visible }.map { it.name }.toSet()
         preferences.edit().putStringSet(KEY_HIDDEN_MODULES, hidden).apply()
     }
 
@@ -44,11 +48,39 @@ class UiPreferencesRepository(context: Context) {
         preferences.edit().putString(KEY_THEME_MODE, mode.name).apply()
     }
 
+    fun loadCoinMarginedCalculationMode(): CoinMarginedCalculationMode {
+        val saved = preferences.getString(
+            KEY_COIN_MARGINED_CALCULATION_MODE,
+            CoinMarginedCalculationMode.CoinQuantity.name
+        )
+        return CoinMarginedCalculationMode.entries.firstOrNull { it.name == saved }
+            ?: CoinMarginedCalculationMode.CoinQuantity
+    }
+
+    fun saveCoinMarginedCalculationMode(mode: CoinMarginedCalculationMode) {
+        preferences.edit().putString(KEY_COIN_MARGINED_CALCULATION_MODE, mode.name).apply()
+    }
+
+    fun loadCoinMarginedCalculationModeRemembered(): Boolean =
+        preferences.getBoolean(KEY_COIN_MARGINED_CALCULATION_MODE_REMEMBERED, false)
+
+    fun saveCoinMarginedCalculationModeRemembered(remembered: Boolean) {
+        preferences.edit().putBoolean(KEY_COIN_MARGINED_CALCULATION_MODE_REMEMBERED, remembered).apply()
+    }
+
+    fun loadHasSeenCoinMarginedModeDialog(): Boolean = loadCoinMarginedCalculationModeRemembered()
+
+    fun saveHasSeenCoinMarginedModeDialog(hasSeen: Boolean) {
+        saveCoinMarginedCalculationModeRemembered(hasSeen)
+    }
+
     private companion object {
         const val PREFERENCES = "ui_preferences"
         const val KEY_MODULE_ORDER = "module_order"
         const val KEY_HIDDEN_MODULES = "hidden_modules"
         const val KEY_AVERAGING_EXPANDED = "averaging_expanded"
         const val KEY_THEME_MODE = "theme_mode"
+        const val KEY_COIN_MARGINED_CALCULATION_MODE = "coin_margined_calculation_mode"
+        const val KEY_COIN_MARGINED_CALCULATION_MODE_REMEMBERED = "coin_margined_calculation_mode_remembered"
     }
 }

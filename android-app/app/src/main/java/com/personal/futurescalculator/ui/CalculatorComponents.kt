@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -28,8 +29,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.personal.futurescalculator.model.MarginMode
@@ -332,10 +336,18 @@ fun NumberInput(
     label: String,
     modifier: Modifier = Modifier,
     readOnly: Boolean = false,
-    onReadOnlyTap: () -> Unit = {}
+    onReadOnlyTap: () -> Unit = {},
+    onSubmit: (() -> Unit)? = null
 ) {
     val textValue = value?.stripTrailingZeros()?.toPlainString() ?: ""
     var textFieldValue by remember(label) { mutableStateOf(TextFieldValue(textValue)) }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val finishInput = {
+        focusManager.clearFocus(force = true)
+        keyboardController?.hide()
+        onSubmit?.invoke()
+    }
 
     LaunchedEffect(value) {
         val updatedValue = value?.stripTrailingZeros()?.toPlainString() ?: ""
@@ -385,7 +397,11 @@ fun NumberInput(
                     }
                 },
             readOnly = readOnly,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Decimal,
+                imeAction = ImeAction.Done
+            ),
+            keyboardActions = KeyboardActions(onDone = { finishInput() }),
             singleLine = true,
             textStyle = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurface),
             decorationBox = { innerTextField ->
@@ -393,6 +409,58 @@ fun NumberInput(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(40.dp),
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f))
+                ) {
+                    Box(
+                        modifier = Modifier.padding(horizontal = 10.dp),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        innerTextField()
+                    }
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun CompactTextInput(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    onSubmit: (() -> Unit)? = null
+) {
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val finishInput = {
+        focusManager.clearFocus(force = true)
+        keyboardController?.hide()
+        onSubmit?.invoke()
+    }
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { finishInput() }),
+            textStyle = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurface),
+            decorationBox = { innerTextField ->
+                Surface(
+                    modifier = Modifier.fillMaxWidth().height(40.dp),
                     shape = MaterialTheme.shapes.small,
                     color = MaterialTheme.colorScheme.surface,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f))

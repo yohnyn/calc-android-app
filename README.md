@@ -1,21 +1,22 @@
 # calcApp
 
-个人使用的 Android 合约收益计算器项目，用于模拟 USDT 本位/相关合约仓位的收益、亏损、ROI、保证金、强平价估算、补仓计算和多方案对比。
+个人使用的 Android 合约收益计算器项目，用于模拟 U 本位和币本位合约仓位的收益、亏损、ROI、保证金、强平价估算、补仓计算和多方案对比。
 
 ## 当前最重要文档
 
 如果你要把项目交给另一个 AI 继续开发，请让它按顺序读取：
 
-1. `AI_HANDOFF.md`：最快了解当前项目接力上下文、限制、风险和下一步。
-2. `APP_DEVELOPMENT_SPEC.md`：产品和开发总规范，是功能验收的最高依据。
-3. `PROJECT_STATUS.md`：当前项目进度、已知问题和下一步任务。
-4. `CURRENT_TASK.md`：最近一次任务记录和当前待办。
-5. `AGENTS.md`：AI/代理工具必须遵守的构建与命令限制。
+1. `AGENTS.md`：AI/代理工具必须遵守的操作限制。
+2. `AI_HANDOFF.md`：快速了解接力上下文和推荐下一步。
+3. `APP_DEVELOPMENT_SPEC.md`：唯一产品范围、公式和验收规范。
+4. `PROJECT_STATUS.md`：唯一长期项目状态、风险和下一步。
+5. `CURRENT_TASK.md`：仅记录当前任务。
 
 其中：
 
-- **另一个 AI 第一份应该读：`AI_HANDOFF.md`**
-- **功能实现最终以：`APP_DEVELOPMENT_SPEC.md` 为准**
+- **另一个 AI 第一份应该读：`AGENTS.md`**
+- **功能验收以：`APP_DEVELOPMENT_SPEC.md` 与用户最新要求共同为准**
+- **`.aider.chat.history.md` 仅为历史档案，不参与当前规则判断**
 
 ## 主要文件
 
@@ -44,29 +45,11 @@ android-app
 
 ## 重要限制
 
-根据 `AGENTS.md` 和当前用户要求：
-
-- AI 不应执行终端命令。
-- AI 不应运行 Gradle。
-- AI 不应使用 shell。
-- AI 不应执行 build / assemble / compile / install / test。
-- 编译、构建、测试、真机运行由用户本地执行。
+所有代理操作限制以 `AGENTS.md` 为唯一依据。
 
 ## 文档维护规则
 
-每次完成开发或文档任务后，应同步维护：
-
-- `PROJECT_STATUS.md`
-- `CURRENT_TASK.md`
-- `AI_HANDOFF.md`
-
-### 自动更新要求
-
-从现在开始，AI 每次完成任何任务后，即使用户没有特别说明，也必须自动检查并更新上述文档中需要更新的内容。
-
-更新原则：
-
-- 项目长期状态、已完成内容、已知问题、下一步任务：更新 `PROJECT_STATUS.md`。
-- 当前任务目标、执行结果、剩余待办：更新 `CURRENT_TASK.md`。
-- 给下一位 AI/开发者的接力上下文、限制、风险、推荐下一步：更新 `AI_HANDOFF.md`。
-- 如果任务只影响其中一个文档，只更新相关文档；如果不确定，优先同时检查这三个文档。
+- 产品范围、公式或验收规则变化：更新 `APP_DEVELOPMENT_SPEC.md`。
+- 长期状态、已完成内容、风险或下一步变化：更新 `PROJECT_STATUS.md`。
+- 当前任务发生变化：更新 `CURRENT_TASK.md`。
+- 只有交接入口或关键上下文变化时才更新 `AI_HANDOFF.md`，避免复制状态文档。

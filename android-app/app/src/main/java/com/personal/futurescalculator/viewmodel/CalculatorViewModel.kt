@@ -19,6 +19,7 @@ import com.personal.futurescalculator.model.AveragingDecisionResult
 import com.personal.futurescalculator.model.CalculationInput
 import com.personal.futurescalculator.model.CalculationResult
 import com.personal.futurescalculator.model.CoinAsset
+import com.personal.futurescalculator.model.CoinMarginedCalculationMode
 import com.personal.futurescalculator.model.CoinMarginedResult
 import com.personal.futurescalculator.model.HomeModule
 import com.personal.futurescalculator.model.ComparisonItem
@@ -51,13 +52,14 @@ data class CalculatorUiState(
     val priceUpdatedAt: Long? = null,
     val isLoadingPrices: Boolean = false,
     val priceLoadError: Boolean = false,
+    val coinMarginedCalculationMode: CoinMarginedCalculationMode = CoinMarginedCalculationMode.CoinQuantity,
     val coinMarginedResult: CoinMarginedResult? = null,
+    val hasSeenCoinMarginedModeDialog: Boolean = false,
+    val showCoinMarginedModeDialog: Boolean = false,
     val moduleOrder: List<HomeModule> = HomeModule.defaultOrder,
     val visibleModules: Set<HomeModule> = HomeModule.entries.toSet(),
     val averagingExpanded: Boolean = true,
     val themeMode: ThemeMode = ThemeMode.System,
-    val downloadingIconIds: Set<String> = emptySet(),
-    val iconDownloadNotice: String? = null,
     val historyRecords: List<HistoryRecord> = emptyList()
 )
 
@@ -85,6 +87,9 @@ class CalculatorViewModel(context: Context) : ViewModel() {
             visibleModules = uiPreferencesRepository.loadVisibleModules(),
             averagingExpanded = uiPreferencesRepository.loadAveragingExpanded(),
             themeMode = uiPreferencesRepository.loadThemeMode(),
+            coinMarginedCalculationMode = uiPreferencesRepository.loadCoinMarginedCalculationMode()
+                ?: CoinMarginedCalculationMode.CoinQuantity,
+            hasSeenCoinMarginedModeDialog = uiPreferencesRepository.loadHasSeenCoinMarginedModeDialog(),
             historyRecords = historyRepository.load()
         )
         refreshPrices()
@@ -191,8 +196,9 @@ class CalculatorViewModel(context: Context) : ViewModel() {
                 moduleOrder = state.moduleOrder,
                 visibleModules = state.visibleModules,
                 averagingExpanded = state.averagingExpanded,
-                themeMode = state.themeMode
-                ,
+                themeMode = state.themeMode,
+                coinMarginedCalculationMode = state.coinMarginedCalculationMode,
+                hasSeenCoinMarginedModeDialog = state.hasSeenCoinMarginedModeDialog,
                 historyRecords = state.historyRecords
             )
         }
@@ -208,9 +214,15 @@ class CalculatorViewModel(context: Context) : ViewModel() {
     }
 
     fun setModuleVisible(module: HomeModule, visible: Boolean) {
-        val updated = _uiState.value.visibleModules.toMutableSet().apply {
+        val updated = (_uiState.value.visibleModules + HomeModule.alwaysVisible).toMutableSet().apply {
             if (visible) add(module) else remove(module)
         }
+        uiPreferencesRepository.saveVisibleModules(updated)
+        _uiState.value = _uiState.value.copy(visibleModules = updated)
+    }
+
+    fun resetModuleVisibility() {
+        val updated = HomeModule.entries.toSet()
         uiPreferencesRepository.saveVisibleModules(updated)
         _uiState.value = _uiState.value.copy(visibleModules = updated)
     }
@@ -225,26 +237,31 @@ class CalculatorViewModel(context: Context) : ViewModel() {
         _uiState.value = _uiState.value.copy(themeMode = mode)
     }
 
-    fun downloadCoinIcon(id: String) {
-        if (id in _uiState.value.downloadingIconIds) return
-        val symbol = _uiState.value.coins.firstOrNull { it.id == id }?.symbol ?: "币种"
-        _uiState.value = _uiState.value.copy(downloadingIconIds = _uiState.value.downloadingIconIds + id)
-        viewModelScope.launch(Dispatchers.IO) {
-            val updated = coinRepository.downloadCoinIcon(id)
-            _uiState.value = _uiState.value.copy(
-                coins = if (updated == null) {
-                    _uiState.value.coins
-                } else {
-                    _uiState.value.coins.map { if (it.id == id) updated else it }
-                },
-                downloadingIconIds = _uiState.value.downloadingIconIds - id,
-                iconDownloadNotice = if (updated == null) "$symbol 图标下载失败，请稍后重试" else "$symbol 图标已下载"
-            )
-        }
+    fun updateCoinMarginedCalculationMode(mode: CoinMarginedCalculationMode) {
+        uiPreferencesRepository.saveCoinMarginedCalculationMode(mode)
+        _uiState.value = _uiState.value.copy(coinMarginedCalculationMode = mode)
+        calculateCoinMarginedResult()
     }
 
-    fun consumeIconDownloadNotice() {
-        _uiState.value = _uiState.value.copy(iconDownloadNotice = null)
+    fun onContractModeChanged(mode: SettlementMode) {
+        updateSettlementMode(mode)
+    }
+
+    fun onCoinMarginedModeSelected(mode: CoinMarginedCalculationMode, remember: Boolean) {
+        if (remember) {
+            uiPreferencesRepository.saveCoinMarginedCalculationMode(mode)
+            uiPreferencesRepository.saveHasSeenCoinMarginedModeDialog(true)
+        }
+        _uiState.value = _uiState.value.copy(
+            coinMarginedCalculationMode = mode,
+            hasSeenCoinMarginedModeDialog = _uiState.value.hasSeenCoinMarginedModeDialog || remember,
+            showCoinMarginedModeDialog = false
+        )
+        calculateCoinMarginedResult()
+    }
+
+    fun dismissCoinMarginedModeDialog() {
+        _uiState.value = _uiState.value.copy(showCoinMarginedModeDialog = false)
     }
 
     fun saveHistoryRecord(record: HistoryRecord) {
@@ -281,10 +298,15 @@ class CalculatorViewModel(context: Context) : ViewModel() {
         } else {
             AmountField.Quantity
         }
+        val shouldShowCoinMarginedModeDialog =
+            mode == SettlementMode.CoinMargined &&
+                _uiState.value.settlementMode != SettlementMode.CoinMargined &&
+                !_uiState.value.hasSeenCoinMarginedModeDialog
         _uiState.value = _uiState.value.copy(
             settlementMode = mode,
             input = normalizeAmountFields(_uiState.value.input, source),
-            lastEditedAmountField = source
+            lastEditedAmountField = source,
+            showCoinMarginedModeDialog = shouldShowCoinMarginedModeDialog
         )
         calculateResult()
         calculateComparisonResults()
@@ -353,9 +375,14 @@ class CalculatorViewModel(context: Context) : ViewModel() {
     }
     
     private fun calculateComparisonResults() {
+        val currentInput = _uiState.value.input
         val currentResult = _uiState.value.result
         val comparisonItems = _uiState.value.comparisonItems
-        val comparisonResults = comparisonCalculator.compare(currentResult, comparisonItems)
+        val comparisonResults = comparisonCalculator.compare(
+            current = currentResult,
+            items = comparisonItems,
+            totalFundsForCrossLiquidation = currentInput.totalFunds
+        )
         _uiState.value = _uiState.value.copy(comparisonResults = comparisonResults)
     }
 
@@ -401,6 +428,7 @@ class CalculatorViewModel(context: Context) : ViewModel() {
         val selectedCoin = state.coins.firstOrNull { it.id == state.selectedCoinId }
         _uiState.value = state.copy(
             coinMarginedResult = coinMarginedCalculator.calculate(
+                calculationMode = state.coinMarginedCalculationMode,
                 side = state.input.side,
                 quantity = state.input.quantity,
                 entryPrice = state.input.entryPrice,

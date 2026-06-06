@@ -37,9 +37,7 @@ class CoinRepository(context: Context) {
         return try {
             if (connection.responseCode !in 200..299) error("HTTP ${connection.responseCode}")
             val body = connection.inputStream.bufferedReader().use { it.readText() }
-            val coins = parseMarketResponse(body).mapIndexed { index, coin ->
-                if (index < AUTO_ICON_COUNT) downloadIcon(coin) else coin.withExistingIcon()
-            }
+            val coins = parseMarketResponse(body).map(::downloadIcon)
             preferences.edit()
                 .putString(KEY_COINS, serializeCoins(coins))
                 .putLong(KEY_UPDATED_AT, System.currentTimeMillis())
@@ -48,17 +46,6 @@ class CoinRepository(context: Context) {
         } finally {
             connection.disconnect()
         }
-    }
-
-    fun downloadCoinIcon(id: String): CoinAsset? {
-        val cached = loadCachedCoins()
-        val coin = cached.firstOrNull { it.id == id } ?: return null
-        val updated = downloadIcon(coin)
-        if (updated.iconPath == null) return null
-        preferences.edit()
-            .putString(KEY_COINS, serializeCoins(cached.map { if (it.id == id) updated else it }))
-            .apply()
-        return updated
     }
 
     private fun parseMarketResponse(body: String): List<CoinAsset> {
@@ -197,7 +184,6 @@ class CoinRepository(context: Context) {
         const val KEY_SELECTED = "selected_coin"
         const val KEY_UPDATED_AT = "updated_at"
         const val COIN_LIMIT = 100
-        const val AUTO_ICON_COUNT = 10
         const val COINGECKO_MARKETS_URL =
             "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=150&page=1&sparkline=false&precision=full"
         const val COINGECKO_COIN_URL = "https://api.coingecko.com/api/v3/coins"

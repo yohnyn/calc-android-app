@@ -8,6 +8,29 @@ import com.personal.futurescalculator.model.PositionSide
 import java.math.BigDecimal
 
 object ClipboardFormatter {
+    fun formatSinglePerformance(
+        name: String,
+        symbol: String,
+        input: CalculationInput,
+        result: CalculationResult?
+    ): String {
+        return buildString {
+            appendLine("$name · $symbol 合约收益战绩")
+            appendLine("${input.side.label()} · ${input.marginMode.label()} · ${input.leverage.stripTrailingZeros().toPlainString()}x")
+            appendLine("开仓价：${DecimalFormatters.formatCurrency(input.entryPrice)} USDT")
+            appendLine("平仓价：${DecimalFormatters.formatCurrency(input.exitPrice)} USDT")
+            appendLine("投入保证金：${DecimalFormatters.formatCurrency(result?.requiredMargin)} USDT")
+            appendLine("币数量：${DecimalFormatters.formatQuantity(result?.quantity)} $symbol")
+            appendLine("净盈亏：${DecimalFormatters.formatPositiveNegative(result?.netPnl)} USDT")
+            appendLine("ROI：${DecimalFormatters.formatPercentage(result?.roiPercent)}")
+            appendLine("总手续费约：${DecimalFormatters.formatCurrency(result?.totalFee)} USDT")
+            appendLine(
+                "估算强平价：${result?.liquidationPrice?.let { DecimalFormatters.formatCurrency(it) + " USDT" } ?: "无法可靠估算"}"
+            )
+            append("强平价为估算值，仅供参考，不构成投资建议。")
+        }
+    }
+
     fun formatPerformance(
         input: CalculationInput,
         result: CalculationResult?,

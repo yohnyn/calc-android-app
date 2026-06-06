@@ -17,5 +17,6 @@ data class CalculationResult(
     val stopLossPriceByAmount: BigDecimal?,
     val stopLossPriceByRoi: BigDecimal?,
     val liquidationPrice: BigDecimal?,
-    val distanceToLiquidationPercent: BigDecimal?
+    val distanceToLiquidationPercent: BigDecimal?,
+    val usedTotalFundsForLiquidation: Boolean = false
 )

@@ -1,21 +1,20 @@
 package com.personal.futurescalculator.ui
 
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
@@ -49,6 +49,8 @@ fun PositionSideSelector(
         secondSelected = selectedSide == PositionSide.Short,
         onFirstClick = { onSideChange(PositionSide.Long) },
         onSecondClick = { onSideChange(PositionSide.Short) },
+        firstSelectedColor = MaterialTheme.colorScheme.primary,
+        secondSelectedColor = MaterialTheme.colorScheme.primary,
         modifier = modifier
     )
 }
@@ -66,6 +68,8 @@ fun MarginModeSelector(
         secondSelected = selectedMode == MarginMode.Isolated,
         onFirstClick = { onModeChange(MarginMode.Cross) },
         onSecondClick = { onModeChange(MarginMode.Isolated) },
+        firstSelectedColor = MaterialTheme.colorScheme.primary,
+        secondSelectedColor = MaterialTheme.colorScheme.primary,
         modifier = modifier
     )
 }
@@ -78,6 +82,8 @@ private fun TwoOptionSelector(
     secondSelected: Boolean,
     onFirstClick: () -> Unit,
     onSecondClick: () -> Unit,
+    firstSelectedColor: Color,
+    secondSelectedColor: Color,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -92,12 +98,14 @@ private fun TwoOptionSelector(
             SelectorButton(
                 text = firstText,
                 selected = firstSelected,
+                selectedColor = firstSelectedColor,
                 onClick = onFirstClick,
                 modifier = Modifier.weight(1f)
             )
             SelectorButton(
                 text = secondText,
                 selected = secondSelected,
+                selectedColor = secondSelectedColor,
                 onClick = onSecondClick,
                 modifier = Modifier.weight(1f)
             )
@@ -109,13 +117,14 @@ private fun TwoOptionSelector(
 private fun SelectorButton(
     text: String,
     selected: Boolean,
+    selectedColor: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colors = if (selected) {
         ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary
+            containerColor = selectedColor,
+            contentColor = Color.White
         )
     } else {
         ButtonDefaults.buttonColors(
@@ -126,12 +135,17 @@ private fun SelectorButton(
 
     Button(
         onClick = onClick,
-        modifier = modifier.heightIn(min = 42.dp),
+        modifier = modifier.height(30.dp),
         shape = MaterialTheme.shapes.small,
         colors = colors,
-        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 0.dp)
     ) {
-        Text(text = text, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
+        )
     }
 }
 
@@ -139,45 +153,174 @@ private fun SelectorButton(
 fun LeverageSelector(
     leverage: BigDecimal,
     onLeverageChange: (BigDecimal) -> Unit,
+    selectedColor: Color = MaterialTheme.colorScheme.primary,
     modifier: Modifier = Modifier
 ) {
-    val leverageValue = leverage.toFloat().coerceIn(1f, 125f)
+    val context = LocalContext.current
+    val leverageOptions = listOf("1x", "2x", "3x", "5x", "10x", "20x", "50x", "100x", "125x")
+    val selectedLeverage = leverage.stripTrailingZeros().toPlainString() + "x"
+    val selectedIsPreset = selectedLeverage in leverageOptions
+    var customTapCount by remember { mutableStateOf(0) }
+    var customEditing by remember { mutableStateOf(false) }
+    var customText by remember { mutableStateOf(leverage.stripTrailingZeros().toPlainString()) }
+
+    LaunchedEffect(leverage) {
+        if (!customEditing) {
+            customText = leverage.stripTrailingZeros().toPlainString()
+        }
+    }
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "杠杆",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = "${leverageValue.toInt()}x",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-        Slider(
-            value = leverageValue,
-            onValueChange = { value ->
-                onLeverageChange(BigDecimal(value.toInt().coerceIn(1, 125)))
-            },
-            valueRange = 1f..125f,
-            steps = 123
+        Text(
+            text = "杠杆",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+        listOf(leverageOptions.take(5), leverageOptions.drop(5)).forEachIndexed { rowIndex, options ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                options.forEach { option ->
+                    LeverageButton(
+                        text = option,
+                        selected = option == selectedLeverage,
+                        selectedColor = selectedColor,
+                        onClick = {
+                            customEditing = false
+                            onLeverageChange(BigDecimal(option.removeSuffix("x")))
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                if (rowIndex == 1) {
+                    CustomLeverageInput(
+                        text = customText,
+                        editing = customEditing,
+                        selected = !selectedIsPreset,
+                        selectedColor = selectedColor,
+                        modifier = Modifier.weight(1f),
+                        onTapWhenLocked = {
+                            customTapCount += 1
+                            if (customTapCount >= 2) {
+                                customEditing = true
+                                customTapCount = 0
+                            }
+                        },
+                        onTextChange = { nextText ->
+                            val normalized = nextText.trim()
+                            customText = normalized
+                            val parsed = runCatching { BigDecimal(normalized) }.getOrNull()
+                            when {
+                                parsed != null && parsed > BigDecimal("125") -> {
+                                    customText = ""
+                                    onLeverageChange(BigDecimal.ONE)
+                                    Toast.makeText(
+                                        context,
+                                        "杠杆不能超过 125x，已恢复为 1x",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                                parsed != null && parsed >= BigDecimal.ONE -> {
+                                    onLeverageChange(parsed)
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LeverageButton(
+    text: String,
+    selected: Boolean,
+    selectedColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Button(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.small,
+        modifier = modifier.height(32.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 2.dp, vertical = 0.dp),
+        colors = if (selected) {
+            ButtonDefaults.buttonColors(
+                containerColor = selectedColor,
+                contentColor = Color.White
+            )
+        } else {
+            ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f),
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        },
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
+    ) {
+        Text(text = text, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun CustomLeverageInput(
+    text: String,
+    editing: Boolean,
+    selected: Boolean,
+    selectedColor: Color,
+    modifier: Modifier = Modifier,
+    onTapWhenLocked: () -> Unit,
+    onTextChange: (String) -> Unit
+) {
+    val containerColor = if (selected) {
+        selectedColor
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f)
+    }
+    val contentColor = if (selected) {
+        Color.White
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Surface(
+        modifier = modifier
+            .height(32.dp)
+            .pointerInput(editing) {
+                if (!editing) {
+                    detectTapGestures { onTapWhenLocked() }
+                }
+            },
+        shape = MaterialTheme.shapes.small,
+        color = containerColor
+    ) {
+        Box(
+            modifier = Modifier.padding(horizontal = 8.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Text("1x", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("125x", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (editing) {
+                BasicTextField(
+                    value = text,
+                    onValueChange = onTextChange,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    textStyle = MaterialTheme.typography.labelLarge.copy(
+                        color = contentColor,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                )
+            } else {
+                Text(
+                    text = if (selected) "${text}x" else "其他",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = contentColor
+                )
+            }
         }
     }
 }
@@ -192,7 +335,7 @@ fun NumberInput(
     onReadOnlyTap: () -> Unit = {}
 ) {
     val textValue = value?.stripTrailingZeros()?.toPlainString() ?: ""
-    var textFieldValue by remember { mutableStateOf(TextFieldValue(textValue)) }
+    var textFieldValue by remember(label) { mutableStateOf(TextFieldValue(textValue)) }
 
     LaunchedEffect(value) {
         val updatedValue = value?.stripTrailingZeros()?.toPlainString() ?: ""
@@ -208,43 +351,62 @@ fun NumberInput(
         }
     }
 
-    OutlinedTextField(
-        value = textFieldValue,
-        onValueChange = {
-            if (readOnly) {
-                return@OutlinedTextField
-            }
-
-            val normalizedText = it.text.trim()
-            textFieldValue = it.copy(text = normalizedText)
-            if (normalizedText.isEmpty()) {
-                onValueChange(null)
-                return@OutlinedTextField
-            }
-
-            runCatching { BigDecimal(normalizedText) }
-                .onSuccess(onValueChange)
-        },
-        label = { Text(label) },
-        modifier = modifier
-            .fillMaxWidth()
-            .pointerInput(readOnly) {
-                if (readOnly) {
-                    detectTapGestures { onReadOnlyTap() }
-                }
-            },
-        readOnly = readOnly,
-        shape = MaterialTheme.shapes.small,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-        singleLine = true,
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = MaterialTheme.colorScheme.primary,
-            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f),
-            focusedContainerColor = MaterialTheme.colorScheme.surface,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-            cursorColor = MaterialTheme.colorScheme.primary
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-    )
+        BasicTextField(
+            value = textFieldValue,
+            onValueChange = {
+                if (readOnly) {
+                    return@BasicTextField
+                }
+
+                val normalizedText = it.text.trim()
+                textFieldValue = it.copy(text = normalizedText)
+                if (normalizedText.isEmpty()) {
+                    onValueChange(null)
+                    return@BasicTextField
+                }
+
+                runCatching { BigDecimal(normalizedText) }
+                    .onSuccess(onValueChange)
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .pointerInput(readOnly) {
+                    if (readOnly) {
+                        detectTapGestures { onReadOnlyTap() }
+                    }
+                },
+            readOnly = readOnly,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurface),
+            decorationBox = { innerTextField ->
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(40.dp),
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f))
+                ) {
+                    Box(
+                        modifier = Modifier.padding(horizontal = 10.dp),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        innerTextField()
+                    }
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -263,7 +425,8 @@ fun SectionPanel(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary
             )
             Box {
                 trailing?.invoke()
@@ -274,7 +437,7 @@ fun SectionPanel(
             shape = MaterialTheme.shapes.small,
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 1.dp,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.16f))
         ) {
             Column(
                 modifier = Modifier.padding(14.dp),

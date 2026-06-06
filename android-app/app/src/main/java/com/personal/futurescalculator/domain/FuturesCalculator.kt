@@ -23,12 +23,26 @@ class FuturesCalculator {
         // 计算所需初始保证金
         val requiredMargin = positionValue.divide(calculatedInput.leverage, DIVIDE_SCALE, RoundingMode.HALF_UP)
         
+        val targetProfitPriceByAmount = calculateTargetProfitPriceByAmount(calculatedInput)
+        val targetProfitPriceByRoi = calculateTargetProfitPriceByRoi(calculatedInput, requiredMargin)
+        val stopLossPriceByAmount = calculateStopLossPriceByAmount(calculatedInput)
+        val stopLossPriceByRoi = calculateStopLossPriceByRoi(calculatedInput, requiredMargin)
+        val reversePrices = listOfNotNull(
+            targetProfitPriceByAmount,
+            targetProfitPriceByRoi,
+            stopLossPriceByAmount,
+            stopLossPriceByRoi
+        )
+        val effectiveExitPrice = calculatedInput.exitPrice
+            ?: reversePrices.singleOrNull()
+        val calculationInput = calculatedInput.copy(exitPrice = effectiveExitPrice)
+
         // 计算未扣手续费盈亏
-        val grossPnl = calculateGrossPnl(calculatedInput)
+        val grossPnl = calculateGrossPnl(calculationInput)
         
         // 计算手续费
-        val openFee = calculateOpenFee(calculatedInput)
-        val closeFee = calculateCloseFee(calculatedInput)
+        val openFee = calculateOpenFee(calculationInput)
+        val closeFee = calculateCloseFee(calculationInput)
         val totalFee = closeFee?.let { openFee + it }
         
         // 计算净盈亏
@@ -48,11 +62,6 @@ class FuturesCalculator {
         // 计算强平价
         val liquidationPrice = calculateLiquidationPrice(calculatedInput)
 
-        val targetProfitPriceByAmount = calculateTargetProfitPriceByAmount(calculatedInput)
-        val targetProfitPriceByRoi = calculateTargetProfitPriceByRoi(calculatedInput, requiredMargin)
-        val stopLossPriceByAmount = calculateStopLossPriceByAmount(calculatedInput)
-        val stopLossPriceByRoi = calculateStopLossPriceByRoi(calculatedInput, requiredMargin)
-        
         // 计算到强平价距离
         val distanceToLiquidationPercent = calculateDistanceToLiquidation(calculatedInput, liquidationPrice)
         
@@ -71,13 +80,16 @@ class FuturesCalculator {
             stopLossPriceByAmount = stopLossPriceByAmount,
             stopLossPriceByRoi = stopLossPriceByRoi,
             liquidationPrice = liquidationPrice,
-            distanceToLiquidationPercent = distanceToLiquidationPercent
+            distanceToLiquidationPercent = distanceToLiquidationPercent,
+            usedTotalFundsForLiquidation = calculatedInput.marginMode == MarginMode.Cross &&
+                calculatedInput.totalFunds != null &&
+                liquidationPrice != null
         )
     }
 
     private fun isValidInput(input: CalculationInput): Boolean {
         // 杠杆必须大于等于1
-        if (input.leverage < BigDecimal.ONE) {
+        if (input.leverage < BigDecimal.ONE || input.leverage > BigDecimal("125")) {
             return false
         }
         
@@ -100,9 +112,18 @@ class FuturesCalculator {
         if (input.margin != null && input.margin <= BigDecimal.ZERO) {
             return false
         }
+
+        if (input.totalFunds != null && input.totalFunds <= BigDecimal.ZERO) {
+            return false
+        }
         
         // 手续费率必须大于等于0
-        if (input.openFeeRatePercent < BigDecimal.ZERO || input.closeFeeRatePercent < BigDecimal.ZERO) {
+        if (
+            input.openFeeRatePercent < BigDecimal.ZERO ||
+            input.closeFeeRatePercent < BigDecimal.ZERO ||
+            input.openFeeRatePercent >= BigDecimal("100") ||
+            input.closeFeeRatePercent >= BigDecimal("100")
+        ) {
             return false
         }
 
@@ -123,7 +144,10 @@ class FuturesCalculator {
         }
         
         // 维持保证金率必须大于等于0
-        if (input.maintenanceMarginRatePercent < BigDecimal.ZERO) {
+        if (
+            input.maintenanceMarginRatePercent < BigDecimal.ZERO ||
+            input.maintenanceMarginRatePercent >= BigDecimal("100")
+        ) {
             return false
         }
         
@@ -183,18 +207,39 @@ class FuturesCalculator {
         val maintenanceMarginRate = input.maintenanceMarginRatePercent.divide(BigDecimal(100), DIVIDE_SCALE, RoundingMode.HALF_UP)
         
         return if (input.marginMode == MarginMode.Cross) {
-            // 全仓强平价估算（简化模型）
-            if (input.side == PositionSide.Long) {
-                input.entryPrice * (BigDecimal.ONE - BigDecimal.ONE.divide(input.leverage, DIVIDE_SCALE, RoundingMode.HALF_UP) + maintenanceMarginRate)
+            val totalFunds = input.totalFunds ?: return null
+            val quantity = input.quantity ?: return null
+            val positionNotional = input.entryPrice.multiply(quantity)
+            val denominator = quantity.multiply(
+                if (input.side == PositionSide.Long) {
+                    BigDecimal.ONE - maintenanceMarginRate
+                } else {
+                    BigDecimal.ONE + maintenanceMarginRate
+                }
+            )
+            if (denominator <= BigDecimal.ZERO) {
+                null
             } else {
-                input.entryPrice * (BigDecimal.ONE + BigDecimal.ONE.divide(input.leverage, DIVIDE_SCALE, RoundingMode.HALF_UP) - maintenanceMarginRate)
+                val estimatedPrice = if (input.side == PositionSide.Long) {
+                    positionNotional.subtract(totalFunds)
+                        .divide(denominator, DIVIDE_SCALE, RoundingMode.HALF_UP)
+                } else {
+                    positionNotional.add(totalFunds)
+                        .divide(denominator, DIVIDE_SCALE, RoundingMode.HALF_UP)
+                }
+                estimatedPrice.takeIf { it > BigDecimal.ZERO }
             }
         } else {
-            // 逐仓强平价估算（简化模型）
+            // 逐仓简化估算：强平时，仓位权益等于按强平价计算的维持保证金。
+            val leverageRate = BigDecimal.ONE.divide(input.leverage, DIVIDE_SCALE, RoundingMode.HALF_UP)
             if (input.side == PositionSide.Long) {
-                input.entryPrice * (BigDecimal.ONE - BigDecimal.ONE.divide(input.leverage, DIVIDE_SCALE, RoundingMode.HALF_UP) + maintenanceMarginRate)
+                input.entryPrice
+                    .multiply(BigDecimal.ONE - leverageRate)
+                    .divide(BigDecimal.ONE - maintenanceMarginRate, DIVIDE_SCALE, RoundingMode.HALF_UP)
             } else {
-                input.entryPrice * (BigDecimal.ONE + BigDecimal.ONE.divide(input.leverage, DIVIDE_SCALE, RoundingMode.HALF_UP) - maintenanceMarginRate)
+                input.entryPrice
+                    .multiply(BigDecimal.ONE + leverageRate)
+                    .divide(BigDecimal.ONE + maintenanceMarginRate, DIVIDE_SCALE, RoundingMode.HALF_UP)
             }
         }
     }
@@ -204,7 +249,7 @@ class FuturesCalculator {
             return null
         }
         
-        val referencePrice = input.exitPrice ?: input.entryPrice!!
+        val referencePrice = input.entryPrice!!
         
         return if (input.side == PositionSide.Long) {
             (referencePrice - liquidationPrice).multiply(BigDecimal(100))

@@ -150,6 +150,10 @@
 - 最近一次源码变更涉及 `CalculatorScreen.kt` 的收益方案对比 UI：主方案视图传入结算模式，对比方案编辑弹窗可切换 U 本位/币本位，列表/详情/历史快照展示结算模式和币本位计算方式；尚未编译验证
 - 2026-06-07 静态检查确认：`ComparisonCalculator.kt` 当前仍只调用 `FuturesCalculator()`，尚未根据 `ComparisonItem.settlementMode` 或 `coinMarginedCalculationMode` 切换到币本位计算链路。因此收益方案对比中的币本位字段目前应视为 UI/展示/保存层状态，不能视为已完成币本位对比计算支持。
 - 2026-06-07 静态页面拆分：用户反馈、关于 App、隐私政策、免责声明和打赏页面已从 `CalculatorScreen.kt` 拆到 `android-app/app/src/main/java/com/personal/futurescalculator/ui/staticpages/`；`CalculatorScreen.kt` 仍保留设置主页、模块排序/显隐、主题、盈亏配色、币本位模式、历史记录等非静态/状态相关页面。
+- 2026-06-07 历史与设置页面拆分完成：`CalculatorScreen.kt` 已切换为导入 `ui/history/HistoryScreen.kt`、`ui/settings/SettingsScreen.kt`、`ui/settings/PnlDisplayMode.kt` 与 `CoinMarginedModeDialog`；旧的内联历史页、设置页、币本位模式弹窗和私有 `PnlDisplayMode` 已从主文件移除。该轮仅做静态引用与空白检查，未运行 Gradle、编译或测试。
+- 2026-06-07 用户本地编译反馈后修复：移除已拆出的 `ui/settings/SettingsScreen.kt` 中错误的 `androidx.compose.ui.input.pointer.consume` 导入，保留模块排序拖拽里的 `change.consume()` 成员调用；同时复查主文件导入、公开入口和括号结构。该轮仍未运行 Gradle、编译或测试。
+- 2026-06-07 用户本地编译反馈后继续修复：`CalculatorScreen.kt` 对比方案编辑弹窗仍调用已拆入设置页的私有 `CoinMarginedModeOption`，导致 unresolved reference；已改为主文件本地私有 `ComparisonCoinMarginedModeOption`，保持原 UI 样式和交互。该轮仍未运行 Gradle、编译或测试。
+- 2026-06-07 币种选择模块拆分完成：`CoinMarketHeader`、`CoinIcon`、`CoinSelectorDialog` 与私有 `CustomCoinDialog` 已从 `CalculatorScreen.kt` 拆到 `android-app/app/src/main/java/com/personal/futurescalculator/ui/coin/CoinSelection.kt`；主文件改为导入 `ui.coin` 公开入口，原 UI、图标加载策略和自定义币种交互保持不变。该轮仅做非编译静态检查，未运行 Gradle、编译或测试。
 
 当前仓储使用 `SharedPreferences`。
 
@@ -172,13 +176,15 @@
 - 最近一次源码变更为 `CalculatorScreen.kt` 收益方案对比参数展示/编辑调整，尚未由用户本地编译或真机验收
 - 最近一次币种图标加载性能优化尚未由用户本地编译或真机验收；重点验证启动速度、币种弹窗打开速度、内置图标显示和非内置图标后台补全
 - 最近一次支持作者入口样式已调整为更显眼的主题色 Card，尚未由用户本地编译或真机验收
-- 最近一次静态页面拆分尚未由用户本地编译或真机验收；重点确认设置页中的用户反馈、关于、隐私政策、免责声明，以及首页底部支持作者入口均可正常打开和返回
+- 最近一次静态页面、历史页面和设置页面拆分尚未由用户本地编译或真机验收；重点确认设置页中的用户反馈、关于、隐私政策、免责声明、模块排序/显隐、主题/盈亏配色、币本位模式，以及首页底部支持作者入口和历史列表/详情均可正常打开和返回
+- 最近一次币种选择与图标 UI 拆分尚未由用户本地编译或真机验收；重点确认首页币种卡片、币种选择弹窗搜索/选择、自定义币种新增/删除、内置图标/缓存图标/字母占位和非内置图标按需加载
+- 用户本地编译曾反馈 `CalculatorScreen.kt` 拆分后存在错误，本轮已按日志修复对设置页私有 `CoinMarginedModeOption` 的残留调用，并移除设置页拖拽 `consume` 的错误导入；仍需用户再次本地编译确认是否还有其他错误日志
 - 对比方案 UI 已可选择币本位和币本位计算方式，但静态检查已确认 `ComparisonCalculator.kt` 尚未使用这些字段进行币本位计算；当前属于展示/保存层面的增强，发布前建议隐藏入口或补齐计算链路
-- 本轮任务按用户要求维护交接文档；未执行终端命令、shell、Gradle、编译或测试
+- 本轮拆分只执行源码阅读、局部编辑和非编译静态检查；未运行 Gradle、编译或测试，也未提交 git
 - UI 是否完整符合 `APP_DEVELOPMENT_SPEC.md`，尤其是竖屏布局、深色模式和交互细节
 - 数值边界、ROI、币本位公式及强平估算是否符合预期
 - 仓库仍跟踪 `futures-calculator/android-app/` 下的 3 个早期遗留 Kotlin 文件，存在误改风险
-- `CalculatorScreen.kt` 已达到约 3800 行，后续维护风险较高；是否拆分需由用户明确允许
+- `CalculatorScreen.kt` 仍约 3149 行，后续维护风险较高；后续拆分应继续遵循“每次只拆一个大功能模块、保持 UI 与计算行为不变”的节奏
 - 当前网络与本地持久化实现需要在真机上验证失败降级、隐私说明和数据兼容性
 
 ---
@@ -219,7 +225,7 @@
 优先级 P2：
 
 - 在用户允许后评估拆分超大的 `CalculatorScreen.kt`
-- 继续按低风险方式拆分 `CalculatorScreen.kt`：下一步可优先拆设置子页面或历史页面，但每次只迁移一组页面并保持文案/行为不变
+- 继续按低风险方式拆分 `CalculatorScreen.kt`：下一步应选择一个独立大功能模块，例如对比方案、补仓决策模拟或结果详情弹窗；每次只迁移一组页面/组件并保持文案、UI 与计算行为不变
 - 继续优化 UI 细节和体验
 - 新增功能前先更新规范并确认范围
 
@@ -229,12 +235,16 @@
 
 ## 最近一次同步进度
 
-2026-06-07 17:20
+2026-06-07
 
 ## 最近一次完成内容
 
-- 已按用户要求继续维护三份交接文档：`PROJECT_STATUS.md`、`CURRENT_TASK.md`、`AI_HANDOFF.md`
-- 已同步当前约束：不要执行终端命令、不要运行 Gradle、不要使用 shell，只使用文件编辑工具
+- 已完成上一轮未完成的历史/设置拆分迁移：`CalculatorScreen.kt` 改为使用 `ui.history` 与 `ui.settings` 包中的公开页面/枚举/弹窗实现，并删除主文件中的旧内联实现
+- 已完成币种选择与图标 UI 拆分：新增 `ui/coin/CoinSelection.kt`，迁出 `CoinMarketHeader`、`CoinIcon`、`CoinSelectorDialog` 与私有 `CustomCoinDialog`
+- 已根据用户本地编译反馈移除 `SettingsScreen.kt` 中错误的 `androidx.compose.ui.input.pointer.consume` 导入，并保留拖拽手势里的 `change.consume()` 调用
+- 已根据用户本地编译日志修复 `CalculatorScreen.kt` 中 `CoinMarginedModeOption` unresolved reference：新增本地 `ComparisonCoinMarginedModeOption` 并替换对比方案编辑弹窗中的残留调用
+- 已执行非编译静态检查：确认主文件中不再残留旧历史/设置实现和旧币种选择模块实现，且 `git diff --check` 无空白错误
+- 已按用户要求同步三份交接文档；未运行 Gradle、编译、测试，也未提交 git
 - 已记录最近 `CalculatorScreen.kt` 收益方案对比 UI 变更：对比方案编辑弹窗支持结算模式切换与币本位计算方式选择，方案列表/详情/历史快照展示对应字段
 - 已按最新性能目标调整币图标相关列表与加载方式：币种选择弹窗和对比方案币种选择弹窗保留 `LazyColumn` / `items` 可见项组合策略，避免一次性组合全部币种行；图标改为内置资源优先、缓存优先、非内置图标按需后台加载
 - 已按用户新反馈提高首页底部“支持作者”入口可见度：保留入口，改为主题色 Card，带圆形咖啡图标、标题、副标题和“查看”提示，仍避免红/绿/金及博彩化视觉
@@ -242,5 +252,7 @@
 - 已完成币种图标加载性能优化记录：`CoinAsset` 增加 `iconResourceName`；`CoinRepository.fetchTopCoins()` 不再同步批量下载图标，改为解析市场数据后绑定内置图标或已有本地缓存；`loadIconForCoin()` 支持非内置币图标按需下载并记录失败 ID；`CalculatorScreen.CoinIcon()` 优先渲染 drawable 内置图标，其次渲染缓存 bitmap，最后显示字母占位并后台尝试加载
 - 已将币种选择弹窗和对比方案币种选择弹窗恢复/保留为 `LazyColumn`，避免打开弹窗时一次性组合全部币种行；这与上一轮“全部直接加载”的记录不同，当前以解决启动和弹窗卡顿为准
 - 已记录该源码状态尚未由用户本地编译、测试或真机验证
-- 本轮只使用文件读取/编辑工具，没有执行任何终端命令、shell、Gradle、编译或测试
+- 本轮使用源码读取、局部编辑和非编译静态检查；没有执行 Gradle、编译或测试
 - 业务源码状态仍等待用户本地编译、测试和真机验证反馈
+- 2026-06-07 19:40 文档维护补充：记录过一次被中断的历史/设置页面拆分尝试；该中间态已在后续任务中完成迁移。
+- 2026-06-07 19:50 文档维护补充：记录过一次 `CalculatorScreen.kt` 迁移补丁失败且未应用；该中间态已在后续任务中完成迁移。

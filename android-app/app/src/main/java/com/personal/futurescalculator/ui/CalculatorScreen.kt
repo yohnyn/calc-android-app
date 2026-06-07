@@ -1,12 +1,8 @@
 package com.personal.futurescalculator.ui
 
-import android.graphics.BitmapFactory
 import android.widget.Toast
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,7 +21,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -36,14 +30,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,25 +45,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import androidx.compose.ui.window.Dialog
 import com.personal.futurescalculator.model.AmountField
 import com.personal.futurescalculator.model.AveragingDecisionInput
@@ -97,24 +80,20 @@ import com.personal.futurescalculator.ui.theme.LocalProfitLossPalette
 import com.personal.futurescalculator.ui.theme.ProfitGreen
 import com.personal.futurescalculator.ui.theme.ProfitLossPalette
 import com.personal.futurescalculator.ui.theme.WarningAmber
-import com.personal.futurescalculator.ui.staticpages.AboutScreen
-import com.personal.futurescalculator.ui.staticpages.DisclaimerScreen
 import com.personal.futurescalculator.ui.staticpages.DonationScreen
-import com.personal.futurescalculator.ui.staticpages.FeedbackScreen
-import com.personal.futurescalculator.ui.staticpages.PrivacyPolicyScreen
+import com.personal.futurescalculator.ui.coin.CoinIcon
+import com.personal.futurescalculator.ui.coin.CoinMarketHeader
+import com.personal.futurescalculator.ui.coin.CoinSelectorDialog
+import com.personal.futurescalculator.ui.history.HistoryScreen
+import com.personal.futurescalculator.ui.settings.CoinMarginedModeDialog
+import com.personal.futurescalculator.ui.settings.PnlDisplayMode
+import com.personal.futurescalculator.ui.settings.SettingsScreen
 import com.personal.futurescalculator.util.ClipboardFormatter
 import com.personal.futurescalculator.util.DecimalFormatters
-import com.personal.futurescalculator.data.CoinRepository
 import com.personal.futurescalculator.viewmodel.CalculatorViewModel
 import java.math.BigDecimal
 import java.math.RoundingMode
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlin.math.roundToInt
 
 private const val RESULT_CARD_MAIN = "main"
 private const val RESULT_CARD_COIN = "coin"
@@ -791,109 +770,6 @@ fun CalculatorScreen(
 }
 
 @Composable
-private fun CoinMarketHeader(
-    coin: CoinAsset?,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.34f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.24f))
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            CoinIcon(coin = coin, size = 38)
-            Column(
-                modifier = Modifier.weight(1f).padding(start = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Text(
-                    text = "当前币种",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = coin?.symbol ?: "选择币种",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                Text(
-                    text = coin?.name ?: "点击选择计算币种",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Text(
-                text = "选择",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-    }
-}
-
-@Composable
-private fun CoinIcon(coin: CoinAsset?, size: Int) {
-    val context = LocalContext.current
-    val repository = remember(context) { CoinRepository(context) }
-    var lazyIconPath by remember(coin?.id, coin?.iconPath) { mutableStateOf(coin?.iconPath) }
-    val resourceId = remember(coin?.iconResourceName) {
-        coin?.iconResourceName?.let { name ->
-            context.resources.getIdentifier(name, "drawable", context.packageName)
-        } ?: 0
-    }
-    val bitmap = remember(lazyIconPath) {
-        lazyIconPath?.let { path -> BitmapFactory.decodeFile(path)?.asImageBitmap() }
-    }
-
-    LaunchedEffect(coin?.id, coin?.iconResourceName, lazyIconPath) {
-        val current = coin ?: return@LaunchedEffect
-        if (current.iconResourceName == null && lazyIconPath == null && !current.isCustom) {
-            val loaded = withContext(Dispatchers.IO) { repository.loadIconForCoin(current) }
-            lazyIconPath = loaded.iconPath
-        }
-    }
-
-    if (resourceId != 0) {
-        Image(
-            painter = androidx.compose.ui.res.painterResource(id = resourceId),
-            contentDescription = coin?.symbol,
-            modifier = Modifier.width(size.dp).height(size.dp).clip(CircleShape),
-            contentScale = ContentScale.Fit
-        )
-    } else if (bitmap != null) {
-        Image(
-            bitmap = bitmap,
-            contentDescription = coin?.symbol,
-            modifier = Modifier.width(size.dp).height(size.dp).clip(CircleShape),
-            contentScale = ContentScale.Fit
-        )
-    } else {
-        Surface(
-            modifier = Modifier.width(size.dp).height(size.dp),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceVariant
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Text(
-                    text = coin?.symbol?.take(1) ?: "?",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun SupportAuthorCard(onClick: () -> Unit) {
     Card(
         modifier = Modifier
@@ -1015,182 +891,6 @@ private fun TwoOptionModeSelector(
             ),
             shape = MaterialTheme.shapes.small
         ) { Text(secondText) }
-    }
-}
-
-@Composable
-private fun CoinSelectorDialog(
-    coins: List<CoinAsset>,
-    selectedCoinId: String,
-    onSelect: (String) -> Unit,
-    onAddCustom: (String, BigDecimal) -> Unit,
-    onDeleteCustom: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var search by remember { mutableStateOf("") }
-    var showCustomForm by remember { mutableStateOf(false) }
-    var customSymbol by remember { mutableStateOf("") }
-    var customPrice by remember { mutableStateOf<BigDecimal?>(null) }
-    val filtered = coins.filter {
-        search.isBlank() ||
-            it.symbol.contains(search, ignoreCase = true) ||
-            it.name.contains(search, ignoreCase = true)
-    }
-
-    if (showCustomForm) {
-        CustomCoinDialog(
-            symbol = customSymbol,
-            price = customPrice,
-            onSymbolChange = { customSymbol = it },
-            onPriceChange = { customPrice = it },
-            onSave = {
-                onAddCustom(customSymbol, customPrice!!)
-                customSymbol = ""
-                customPrice = null
-                showCustomForm = false
-            },
-            onDismiss = {
-                customSymbol = ""
-                customPrice = null
-                showCustomForm = false
-            }
-        )
-        return
-    }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier.fillMaxWidth().widthIn(max = 440.dp),
-            shape = MaterialTheme.shapes.medium,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
-            Column(
-                modifier = Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text("选择币种", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                OutlinedTextField(
-                    value = search,
-                    onValueChange = { search = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("搜索币种") },
-                    singleLine = true
-                )
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    items(filtered, key = { it.id }) { coin ->
-                        Surface(
-                            modifier = Modifier.fillMaxWidth().clickable { onSelect(coin.id) },
-                            shape = MaterialTheme.shapes.small,
-                            color = if (coin.id == selectedCoinId) {
-                                MaterialTheme.colorScheme.secondaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.50f)
-                            }
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    modifier = Modifier.weight(1f),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    CoinIcon(coin = coin, size = 30)
-                                    Text(coin.symbol, fontWeight = FontWeight.SemiBold)
-                                }
-                                if (coin.isCustom) {
-                                    TextButton(
-                                        onClick = { onDeleteCustom(coin.id) },
-                                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                                    ) { Text("删除", fontWeight = FontWeight.SemiBold) }
-                                }
-                            }
-                        }
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
-                ) {
-                    TextButton(onClick = { showCustomForm = true }) {
-                        Text("添加自定义币种", fontWeight = FontWeight.SemiBold)
-                    }
-                    TextButton(onClick = onDismiss) { Text("关闭", fontWeight = FontWeight.SemiBold) }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CustomCoinDialog(
-    symbol: String,
-    price: BigDecimal?,
-    onSymbolChange: (String) -> Unit,
-    onPriceChange: (BigDecimal?) -> Unit,
-    onSave: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    val canSave = symbol.isNotBlank() && price != null && price > BigDecimal.ZERO
-
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .widthIn(max = 400.dp),
-            shape = MaterialTheme.shapes.medium,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.22f))
-        ) {
-            Column(
-                modifier = Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "添加自定义币种",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "自定义币种与价格仅保存在本地设备。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                CompactTextInput(
-                    value = symbol,
-                    onValueChange = onSymbolChange,
-                    modifier = Modifier.widthIn(max = 220.dp),
-                    label = "币种名称，例如 ABC"
-                )
-                NumberInput(
-                    value = price,
-                    onValueChange = onPriceChange,
-                    label = "币种价格 USDT"
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("取消", fontWeight = FontWeight.SemiBold)
-                    }
-                    Button(
-                        onClick = onSave,
-                        enabled = canSave,
-                        shape = MaterialTheme.shapes.small
-                    ) {
-                        Text("保存并使用")
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -2650,12 +2350,12 @@ private fun ComparisonSchemeEditorDialog(
                 )
                 if (item.settlementMode == SettlementMode.CoinMargined) {
                     Text("币本位计算方式", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    CoinMarginedModeOption(
+                    ComparisonCoinMarginedModeOption(
                         mode = CoinMarginedCalculationMode.CoinQuantity,
                         selectedMode = item.coinMarginedCalculationMode,
                         onSelect = { item = item.copy(coinMarginedCalculationMode = it) }
                     )
-                    CoinMarginedModeOption(
+                    ComparisonCoinMarginedModeOption(
                         mode = CoinMarginedCalculationMode.InverseContract,
                         selectedMode = item.coinMarginedCalculationMode,
                         onSelect = { item = item.copy(coinMarginedCalculationMode = it) }
@@ -2883,6 +2583,42 @@ fun ComparisonItemCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun ComparisonCoinMarginedModeOption(
+    mode: CoinMarginedCalculationMode,
+    selectedMode: CoinMarginedCalculationMode,
+    onSelect: (CoinMarginedCalculationMode) -> Unit
+) {
+    val selected = mode == selectedMode
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onSelect(mode) },
+        shape = MaterialTheme.shapes.small,
+        color = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.62f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f)
+        },
+        border = BorderStroke(
+            if (selected) 2.dp else 1.dp,
+            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.16f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(mode.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                mode.shortDescription,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -3370,739 +3106,6 @@ private fun createAveragingHistorySnapshot(
 )
 
 @Composable
-private fun HistoryScreen(
-    records: List<HistoryRecord>,
-    onToggleFavorite: (String) -> Unit,
-    onDelete: (Set<String>) -> Unit,
-    onClearCategory: (HistoryCategory?) -> Unit,
-    onBack: () -> Unit
-) {
-    var category by rememberSaveable { mutableStateOf<HistoryCategory?>(null) }
-    var selectedRecord by remember { mutableStateOf<HistoryRecord?>(null) }
-    var selectedIds by rememberSaveable { mutableStateOf(emptySet<String>()) }
-    BackHandler {
-        if (selectedRecord != null) {
-            selectedRecord = null
-        } else {
-            onBack()
-        }
-    }
-    selectedRecord?.let { record ->
-        HistoryDetailScreen(
-            record = records.firstOrNull { it.id == record.id } ?: record,
-            onToggleFavorite = onToggleFavorite,
-            onDelete = {
-                onDelete(setOf(record.id))
-                selectedRecord = null
-            },
-            onBack = { selectedRecord = null }
-        )
-        return
-    }
-    val filtered = records.filter { category == null || it.category == category }
-        .sortedWith(compareByDescending<HistoryRecord> { it.favorite }.thenByDescending { it.savedAt })
-    SettingsPageLayout(title = "历史记录", onBack = onBack) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            HistoryCategoryButton("全部", category == null, { category = null }, Modifier.weight(1f))
-            HistoryCategoryButton(HistoryCategory.ProfitCalculation.label, category == HistoryCategory.ProfitCalculation, { category = HistoryCategory.ProfitCalculation }, Modifier.weight(1f))
-            HistoryCategoryButton(HistoryCategory.SchemeComparison.label, category == HistoryCategory.SchemeComparison, { category = HistoryCategory.SchemeComparison }, Modifier.weight(1f))
-        }
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            HistoryCategoryButton(HistoryCategory.AveragingSimulation.label, category == HistoryCategory.AveragingSimulation, { category = HistoryCategory.AveragingSimulation }, Modifier.weight(1f))
-            HistoryCategoryButton(HistoryCategory.TargetProfitReverse.label, category == HistoryCategory.TargetProfitReverse, { category = HistoryCategory.TargetProfitReverse }, Modifier.weight(1f))
-            HistoryCategoryButton(HistoryCategory.StopLossReverse.label, category == HistoryCategory.StopLossReverse, { category = HistoryCategory.StopLossReverse }, Modifier.weight(1f))
-        }
-        Text(
-            text = "仅在点击“保存本次结果”后保存，详情直接读取保存快照。",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        if (filtered.isEmpty()) {
-            Text("暂无历史记录", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        filtered.forEach { record ->
-            Surface(
-                modifier = Modifier.fillMaxWidth().clickable { selectedRecord = record },
-                shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = record.id in selectedIds,
-                        onCheckedChange = { checked ->
-                            selectedIds = if (checked) selectedIds + record.id else selectedIds - record.id
-                        }
-                    )
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text("${if (record.favorite) "★ " else ""}${record.title}", fontWeight = FontWeight.Bold)
-                        Text(
-                            "${record.summary}${record.roiSummary?.let { " · ROI $it" }.orEmpty()}",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(formatTimestamp(record.savedAt), style = MaterialTheme.typography.labelSmall)
-                    }
-                    Text(record.category.label, style = MaterialTheme.typography.labelSmall)
-                }
-            }
-        }
-        if (selectedIds.isNotEmpty()) {
-            Button(onClick = { onDelete(selectedIds); selectedIds = emptySet() }, modifier = Modifier.fillMaxWidth()) {
-                Text("删除选中记录（${selectedIds.size}）")
-            }
-        }
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SoftOutlinedButton(onClick = { onClearCategory(category) }, modifier = Modifier.weight(1f)) {
-                Text(if (category == null) "清空全部" else "清空分类")
-            }
-            SoftOutlinedButton(onClick = onBack, modifier = Modifier.weight(1f)) { Text("返回") }
-        }
-    }
-}
-
-@Composable
-private fun HistoryCategoryButton(
-    text: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Button(
-        onClick = onClick,
-        modifier = modifier.height(36.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    ) { Text(text, style = MaterialTheme.typography.labelSmall) }
-}
-
-@Composable
-private fun HistoryDetailScreen(
-    record: HistoryRecord,
-    onToggleFavorite: (String) -> Unit,
-    onDelete: () -> Unit,
-    onBack: () -> Unit
-) {
-    SettingsPageLayout(title = "历史详情", onBack = onBack) {
-        Text(record.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("${record.category.label} · ${formatTimestamp(record.savedAt)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        record.sections.forEach { section ->
-            SectionPanel(title = section.title) {
-                section.fields.forEach { field ->
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(field.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(field.value, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End, modifier = Modifier.weight(1f).padding(start = 12.dp))
-                    }
-                }
-            }
-        }
-        Button(onClick = { onToggleFavorite(record.id) }, modifier = Modifier.fillMaxWidth()) {
-            Text(if (record.favorite) "取消收藏" else "收藏")
-        }
-        SoftOutlinedButton(onClick = onDelete, modifier = Modifier.fillMaxWidth()) { Text("删除记录") }
-    }
-}
-
-@Composable
-private fun SettingsScreen(
-    pnlDisplayMode: PnlDisplayMode,
-    onPnlDisplayModeChange: (PnlDisplayMode) -> Unit,
-    themeMode: ThemeMode,
-    onThemeModeChange: (ThemeMode) -> Unit,
-    coinMarginedCalculationMode: CoinMarginedCalculationMode,
-    onCoinMarginedCalculationModeChange: (CoinMarginedCalculationMode) -> Unit,
-    moduleOrder: List<HomeModule>,
-    visibleModules: Set<HomeModule>,
-    onModuleOrderChange: (List<HomeModule>) -> Unit,
-    onResetModuleOrder: () -> Unit,
-    onModuleVisibilityChange: (HomeModule, Boolean) -> Unit,
-    onResetModuleVisibility: () -> Unit,
-    feedbackText: String,
-    onFeedbackChange: (String) -> Unit,
-    priceUpdatedAt: Long?,
-    onBack: () -> Unit
-) {
-    var page by rememberSaveable { mutableStateOf(SettingsPage.Main) }
-    BackHandler {
-        if (page == SettingsPage.Main) {
-            onBack()
-        } else {
-            page = SettingsPage.Main
-        }
-    }
-
-    when (page) {
-        SettingsPage.Feedback -> FeedbackScreen(
-            feedbackText = feedbackText,
-            onFeedbackChange = onFeedbackChange,
-            onBack = { page = SettingsPage.Main }
-        )
-        SettingsPage.About -> AboutScreen(
-            priceUpdatedAt = priceUpdatedAt,
-            onBack = { page = SettingsPage.Main }
-        )
-        SettingsPage.Privacy -> PrivacyPolicyScreen(onBack = { page = SettingsPage.Main })
-        SettingsPage.Disclaimer -> DisclaimerScreen(onBack = { page = SettingsPage.Main })
-        SettingsPage.ModuleOrder -> ModuleOrderScreen(
-            moduleOrder = moduleOrder,
-            onModuleOrderChange = onModuleOrderChange,
-            onReset = onResetModuleOrder,
-            onBack = { page = SettingsPage.Main }
-        )
-        SettingsPage.ModuleVisibility -> ModuleVisibilityScreen(
-            visibleModules = visibleModules,
-            onVisibilityChange = onModuleVisibilityChange,
-            onReset = onResetModuleVisibility,
-            onBack = { page = SettingsPage.Main }
-        )
-        SettingsPage.AppTheme -> AppThemeScreen(
-            themeMode = themeMode,
-            onThemeModeChange = onThemeModeChange,
-            onBack = { page = SettingsPage.Main }
-        )
-        SettingsPage.CoinMarginedMode -> CoinMarginedModeSettingsScreen(
-            mode = coinMarginedCalculationMode,
-            onModeChange = onCoinMarginedCalculationModeChange,
-            onBack = { page = SettingsPage.Main }
-        )
-        SettingsPage.PnlColor -> PnlColorScreen(
-            pnlDisplayMode = pnlDisplayMode,
-            onPnlDisplayModeChange = onPnlDisplayModeChange,
-            onBack = { page = SettingsPage.Main }
-        )
-        SettingsPage.Main -> SettingsHome(
-            onOpenPage = { page = it },
-            onBack = onBack
-        )
-    }
-}
-
-private enum class SettingsPage {
-    Main,
-    Feedback,
-    About,
-    Privacy,
-    Disclaimer,
-    ModuleOrder,
-    ModuleVisibility,
-    AppTheme,
-    CoinMarginedMode,
-    PnlColor,
-}
-
-private enum class PnlDisplayMode {
-    ProfitGreen,
-    ProfitRed,
-    IconsOnly
-}
-
-@Composable
-private fun SettingsHome(
-    onOpenPage: (SettingsPage) -> Unit,
-    onBack: () -> Unit
-) {
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                text = "设置",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-            SettingsMenuButton("App 主题", "选择界面明暗模式") { onOpenPage(SettingsPage.AppTheme) }
-            SettingsMenuButton("币本位计算方式", "选择币数量模式或反向合约模式") { onOpenPage(SettingsPage.CoinMarginedMode) }
-            SettingsMenuButton("盈利亏损配色", "设置盈亏结果颜色与图标显示") { onOpenPage(SettingsPage.PnlColor) }
-            SettingsMenuButton("首页模块排序", "长按拖动调整首页功能顺序") { onOpenPage(SettingsPage.ModuleOrder) }
-            SettingsMenuButton("模块显示管理", "开启或关闭首页功能模块") { onOpenPage(SettingsPage.ModuleVisibility) }
-            SettingsMenuButton("用户反馈", "提交建议并创建 GitHub Issue") { onOpenPage(SettingsPage.Feedback) }
-            SettingsMenuButton("关于 App", "版本信息、数据来源与项目地址") { onOpenPage(SettingsPage.About) }
-            SettingsMenuButton("隐私政策", "查看设备信息与数据使用说明") { onOpenPage(SettingsPage.Privacy) }
-            SettingsMenuButton("免责声明", "查看投资风险与强平价说明") { onOpenPage(SettingsPage.Disclaimer) }
-            SoftOutlinedButton(
-                onClick = onBack,
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.small
-            ) {
-                Text("返回计算器")
-            }
-        }
-    }
-}
-
-@Composable
-private fun AppThemeScreen(
-    themeMode: ThemeMode,
-    onThemeModeChange: (ThemeMode) -> Unit,
-    onBack: () -> Unit
-) {
-    SettingsPageLayout(title = "App 主题", onBack = onBack) {
-        SectionPanel(title = "明暗模式") {
-            Text(
-                text = "选择界面明暗模式，设置会保存在本地。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                ThemeModeButton("跟随系统", ThemeMode.System, themeMode, onThemeModeChange, Modifier.weight(1f))
-                ThemeModeButton("浅色", ThemeMode.Light, themeMode, onThemeModeChange, Modifier.weight(1f))
-                ThemeModeButton("深色", ThemeMode.Dark, themeMode, onThemeModeChange, Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-@Composable
-private fun PnlColorScreen(
-    pnlDisplayMode: PnlDisplayMode,
-    onPnlDisplayModeChange: (PnlDisplayMode) -> Unit,
-    onBack: () -> Unit
-) {
-    SettingsPageLayout(title = "盈利亏损配色", onBack = onBack) {
-        SectionPanel(title = "结果配色") {
-            Text(
-                text = "配色仅应用于盈亏结果，交易方向统一使用主题色。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                ColorModeButton(
-                    text = "盈利绿 · 亏损红",
-                    selected = pnlDisplayMode == PnlDisplayMode.ProfitGreen,
-                    profitColor = ProfitGreen,
-                    lossColor = LossRed,
-                    onClick = { onPnlDisplayModeChange(PnlDisplayMode.ProfitGreen) }
-                )
-                ColorModeButton(
-                    text = "盈利红 · 亏损绿",
-                    selected = pnlDisplayMode == PnlDisplayMode.ProfitRed,
-                    profitColor = LossRed,
-                    lossColor = ProfitGreen,
-                    onClick = { onPnlDisplayModeChange(PnlDisplayMode.ProfitRed) }
-                )
-                ColorModeButton(
-                    text = "仅图标区分",
-                    selected = pnlDisplayMode == PnlDisplayMode.IconsOnly,
-                    profitColor = MaterialTheme.colorScheme.onSurface,
-                    lossColor = MaterialTheme.colorScheme.onSurface,
-                    profitIndicator = "▲ ",
-                    lossIndicator = "▼ ",
-                    onClick = { onPnlDisplayModeChange(PnlDisplayMode.IconsOnly) }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun CoinMarginedModeSettingsScreen(
-    mode: CoinMarginedCalculationMode,
-    onModeChange: (CoinMarginedCalculationMode) -> Unit,
-    onBack: () -> Unit
-) {
-    SettingsPageLayout(title = "币本位计算方式", onBack = onBack) {
-        SectionPanel(title = "计算模式") {
-            Text(
-                text = "币本位支持按持仓币数量计算，也支持反向合约公式。设置会保存在本地。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            CoinMarginedModeOption(
-                mode = CoinMarginedCalculationMode.CoinQuantity,
-                selectedMode = mode,
-                onSelect = onModeChange
-            )
-            CoinMarginedModeOption(
-                mode = CoinMarginedCalculationMode.InverseContract,
-                selectedMode = mode,
-                onSelect = onModeChange
-            )
-        }
-    }
-}
-
-@Composable
-private fun CoinMarginedModeDialog(
-    initialMode: CoinMarginedCalculationMode,
-    onConfirm: (CoinMarginedCalculationMode, Boolean) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var selectedMode by rememberSaveable { mutableStateOf(initialMode) }
-    var rememberChoice by rememberSaveable { mutableStateOf(true) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("选择币本位计算方式", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    text = "首次切换到币本位时请选择计算方式，之后也可在设置中修改。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                CoinMarginedModeOption(
-                    mode = CoinMarginedCalculationMode.CoinQuantity,
-                    selectedMode = selectedMode,
-                    onSelect = { selectedMode = it }
-                )
-                CoinMarginedModeOption(
-                    mode = CoinMarginedCalculationMode.InverseContract,
-                    selectedMode = selectedMode,
-                    onSelect = { selectedMode = it }
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Checkbox(checked = rememberChoice, onCheckedChange = { rememberChoice = it })
-                    Text("记住选择，下次不再提示")
-                }
-            }
-        },
-        confirmButton = {
-            Button(onClick = { onConfirm(selectedMode, rememberChoice) }) {
-                Text("确认")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("稍后再选")
-            }
-        }
-    )
-}
-
-@Composable
-private fun CoinMarginedModeOption(
-    mode: CoinMarginedCalculationMode,
-    selectedMode: CoinMarginedCalculationMode,
-    onSelect: (CoinMarginedCalculationMode) -> Unit
-) {
-    val selected = mode == selectedMode
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onSelect(mode) },
-        shape = MaterialTheme.shapes.small,
-        color = if (selected) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.62f)
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f)
-        },
-        border = BorderStroke(
-            if (selected) 2.dp else 1.dp,
-            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.16f)
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(mode.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(
-                mode.shortDescription,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Composable
-private fun ThemeModeButton(
-    text: String,
-    mode: ThemeMode,
-    selectedMode: ThemeMode,
-    onSelect: (ThemeMode) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Button(
-        onClick = { onSelect(mode) },
-        modifier = modifier.height(40.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (mode == selectedMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = if (mode == selectedMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-        ),
-        shape = MaterialTheme.shapes.small
-    ) {
-        Text(text, style = MaterialTheme.typography.labelMedium)
-    }
-}
-
-@Composable
-private fun SettingsMenuButton(title: String, supporting: String, onClick: () -> Unit) {
-    SoftOutlinedButton(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.small
-    ) {
-        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(text = supporting, style = MaterialTheme.typography.labelMedium)
-        }
-    }
-}
-
-@Composable
-private fun ModuleOrderScreen(
-    moduleOrder: List<HomeModule>,
-    onModuleOrderChange: (List<HomeModule>) -> Unit,
-    onReset: () -> Unit,
-    onBack: () -> Unit
-) {
-    var localOrder by remember(moduleOrder) { mutableStateOf(moduleOrder) }
-    val hapticFeedback = LocalHapticFeedback.current
-    SettingsPageLayout(title = "首页模块排序", onBack = onBack) {
-        SectionPanel(title = "长按拖动排序") {
-            Text(
-                text = "长按模块后上下拖动，顺序会立即保存到本地。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            localOrder.forEach { module ->
-                key(module) {
-                var dragDistance by remember(module) { mutableStateOf(0f) }
-                var itemHeight by remember(module) { mutableStateOf(0f) }
-                var isDragging by remember(module) { mutableStateOf(false) }
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .onSizeChanged { itemHeight = it.height.toFloat() }
-                        .offset { IntOffset(0, if (isDragging) dragDistance.roundToInt() else 0) }
-                        .zIndex(if (isDragging) 1f else 0f)
-                        .shadow(if (isDragging) 12.dp else 0.dp, MaterialTheme.shapes.small)
-                        .pointerInput(module) {
-                            detectDragGesturesAfterLongPress(
-                                onDragStart = {
-                                    isDragging = true
-                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                                },
-                                onDragEnd = {
-                                    isDragging = false
-                                    dragDistance = 0f
-                                },
-                                onDragCancel = {
-                                    isDragging = false
-                                    dragDistance = 0f
-                                },
-                                onDrag = { change, amount ->
-                                    change.consume()
-                                    dragDistance += amount.y
-                                    val currentIndex = localOrder.indexOf(module)
-                                    val swapDistance = (itemHeight * 0.55f).coerceAtLeast(48f)
-                                    val target = when {
-                                        dragDistance > swapDistance -> currentIndex + 1
-                                        dragDistance < -swapDistance -> currentIndex - 1
-                                        else -> currentIndex
-                                    }
-                                    if (target in localOrder.indices && target != currentIndex) {
-                                        val updated = localOrder.toMutableList()
-                                        updated[currentIndex] = localOrder[target]
-                                        updated[target] = module
-                                        localOrder = updated
-                                        onModuleOrderChange(updated)
-                                        dragDistance -= if (target > currentIndex) itemHeight else -itemHeight
-                                        hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    }
-                                }
-                            )
-                        },
-                    shape = MaterialTheme.shapes.small,
-                    color = if (isDragging) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-                    },
-                    border = BorderStroke(
-                        if (isDragging) 2.dp else 1.dp,
-                        if (isDragging) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(module.label, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            if (isDragging) "正在移动" else "长按拖动",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (isDragging) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                }
-            }
-            SoftOutlinedButton(
-                onClick = {
-                    localOrder = HomeModule.defaultOrder
-                    onReset()
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("恢复默认排序")
-            }
-        }
-    }
-}
-
-@Composable
-private fun ModuleVisibilityScreen(
-    visibleModules: Set<HomeModule>,
-    onVisibilityChange: (HomeModule, Boolean) -> Unit,
-    onReset: () -> Unit,
-    onBack: () -> Unit
-) {
-    SettingsPageLayout(title = "模块显示管理", onBack = onBack) {
-        SectionPanel(title = "首页模块") {
-            Text(
-                text = "仓位参数、目标与止损、计算结果为核心模块，始终显示。这里只管理收益方案对比、补仓决策模拟和历史记录。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            HomeModule.configurableVisibility.forEach { module ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(module.label, fontWeight = FontWeight.SemiBold)
-                    Switch(
-                        checked = module in visibleModules,
-                        onCheckedChange = { onVisibilityChange(module, it) }
-                    )
-                }
-            }
-            SoftOutlinedButton(
-                onClick = onReset,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("恢复默认显示")
-            }
-        }
-    }
-}
-
-@Composable
-private fun SettingsPageLayout(
-    title: String,
-    onBack: () -> Unit,
-    content: @Composable () -> Unit
-) {
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(text = title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            content()
-            SoftOutlinedButton(
-                onClick = onBack,
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.small
-            ) {
-                Text("返回设置")
-            }
-        }
-    }
-}
-
-@Composable
-private fun ColorModeButton(
-    text: String,
-    selected: Boolean,
-    profitColor: Color,
-    lossColor: Color,
-    profitIndicator: String = "",
-    lossIndicator: String = "",
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    SoftOutlinedButton(
-        onClick = onClick,
-        modifier = modifier,
-        shape = MaterialTheme.shapes.small,
-        border = BorderStroke(
-            if (selected) 2.dp else 1.dp,
-            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-        )
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                ColorResultPreview(
-                    text = "${profitIndicator}+100",
-                    color = profitColor,
-                    modifier = Modifier.weight(1f)
-                )
-                ColorResultPreview(
-                    text = "${lossIndicator}-100",
-                    color = lossColor,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            Text(text = text, fontWeight = FontWeight.Bold)
-            Text(
-                text = if (selected) "当前使用" else "点击切换",
-                style = MaterialTheme.typography.labelSmall,
-                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Composable
-private fun ColorResultPreview(
-    text: String,
-    color: Color,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier,
-        shape = MaterialTheme.shapes.small,
-        color = color.copy(alpha = 0.16f),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.46f))
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold,
-            color = color,
-            textAlign = TextAlign.Center
-        )
-    }
-}
-
-@Composable
 private fun pnlColor(value: BigDecimal?): androidx.compose.ui.graphics.Color {
     val palette = LocalProfitLossPalette.current
     return when {
@@ -4139,10 +3142,6 @@ private fun targetPriceSupporting(amountPrice: BigDecimal?, roiPrice: BigDecimal
         roiPrice != null -> "按 ROI 反推"
         else -> null
     }
-}
-
-private fun formatTimestamp(timestamp: Long): String {
-    return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
 }
 
 private const val MAIN_SCHEME_ID = "main_scheme"

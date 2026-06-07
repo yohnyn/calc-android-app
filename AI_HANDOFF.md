@@ -2,108 +2,78 @@
 
 ## 交接摘要
 
-本仓库是一个 Android/Kotlin/Jetpack Compose 项目，应用领域为期货仓位计算器。用户明确要求：不要执行任何终端命令、不要运行 Gradle、不要使用 shell，只允许通过文件编辑工具维护项目状态文档。
+本仓库是 Android/Kotlin/Jetpack Compose 项目，应用领域为个人合约收益计算器。当前用户正在推进 `CalculatorScreen.kt` 拆分，要求每次只拆一个大功能模块，不改 UI，不影响主要计算功能，不运行编译/测试，不提交 git。
 
 ## 关键约束
 
-- 适用根目录 `AGENTS.md`：禁止运行任何构建、编译、安装、测试命令，包括 Gradle。
-- 不应使用终端命令进行验证。
-- 如需验证，只能建议用户在本地自行运行。
+- 必须遵守根目录 `AGENTS.md`：禁止运行任何构建、编译、安装、测试命令，包括 Gradle。
+- 用户明确要求：不要在线编译，不要本地编译，不提交 git。
+- 允许源码阅读、局部编辑、静态推理和非编译检查。
+- 完成源码任务后要同步项目文档。
 
 ## 重要文件
 
-- `PROJECT_STATUS.md`：项目总体状态。
-- `CURRENT_TASK.md`：当前任务、约束、待验证事项。
-- `AI_HANDOFF.md`：给下一位 AI/协作者的交接说明。
-- `android-app/app/src/main/java/com/personal/futurescalculator/model/HomeModule.kt`：首页模块枚举与默认排序/可配置可见性规则。
-- `android-app/app/src/main/java/com/personal/futurescalculator/model/ComparisonItem.kt`：对比方案数据模型，包含结算模式与币本位计算方式字段。
-- `android-app/app/src/main/java/com/personal/futurescalculator/data/UiPreferencesRepository.kt`：UI 偏好持久化，包括模块排序与隐藏模块集合。
-- `android-app/app/src/main/java/com/personal/futurescalculator/viewmodel/CalculatorViewModel.kt`：UI 状态与模块显示更新逻辑。
-- `android-app/app/src/main/java/com/personal/futurescalculator/domain/ComparisonCalculator.kt`：收益方案对比计算逻辑，需重点确认是否完整支持币本位对比方案。
-- `android-app/app/src/main/java/com/personal/futurescalculator/model/CoinAsset.kt`：币种模型，包含 `iconUrl`、本地缓存 `iconPath` 与内置图标 `iconResourceName`。
-- `android-app/app/src/main/java/com/personal/futurescalculator/data/CoinRepository.kt`：币价获取、自定义币、图标资源映射与按需图标缓存。
-- `android-app/app/src/main/java/com/personal/futurescalculator/ui/CalculatorScreen.kt`：Compose UI，包括首页、设置页、模块显示管理页面和 `CoinIcon` 图标渲染。
-- `android-app/app/src/main/java/com/personal/futurescalculator/ui/staticpages/`：已拆出的静态整页 UI，包括用户反馈、关于 App、隐私政策、免责声明和打赏页面。
+- `AGENTS.md`：代理操作限制，尤其是禁止构建/编译/测试。
+- `APP_DEVELOPMENT_SPEC.md`：产品范围、公式和验收规范。
+- `PROJECT_STATUS.md`：长期项目状态、风险和下一步。
+- `CURRENT_TASK.md`：最近一次任务记录。
+- `AI_HANDOFF.md`：当前交接说明。
+- `android-app/app/src/main/java/com/personal/futurescalculator/ui/CalculatorScreen.kt`：主计算页面，仍然较大，后续拆分从这里继续。
+- `android-app/app/src/main/java/com/personal/futurescalculator/ui/coin/CoinSelection.kt`：已拆出的币种头部、币种图标、币种选择弹窗和自定义币种弹窗。
+- `android-app/app/src/main/java/com/personal/futurescalculator/ui/staticpages/`：已拆出的用户反馈、关于、隐私政策、免责声明和打赏页面。
+- `android-app/app/src/main/java/com/personal/futurescalculator/ui/history/HistoryScreen.kt`：已拆出的历史列表与历史详情页面。
+- `android-app/app/src/main/java/com/personal/futurescalculator/ui/settings/SettingsScreen.kt`：已拆出的设置首页、设置子页面、模块排序/显隐、主题、盈亏配色和币本位模式弹窗。
+- `android-app/app/src/main/java/com/personal/futurescalculator/ui/settings/PnlDisplayMode.kt`：已拆出的盈亏显示模式枚举。
 
-## 最近代码状态
+## 最近完成内容
 
-### 收益方案对比 UI
+本轮完成上一轮未收尾的历史/设置拆分：
 
-最近一次源码修改集中在 `CalculatorScreen.kt`：
+- `CalculatorScreen.kt` 已导入并调用 `ui.history.HistoryScreen`。
+- `CalculatorScreen.kt` 已导入并调用 `ui.settings.SettingsScreen`。
+- `CalculatorScreen.kt` 已使用 `ui.settings.PnlDisplayMode`。
+- `CalculatorScreen.kt` 已使用 `ui.settings.CoinMarginedModeDialog`。
+- `CalculatorScreen.kt` 中旧的内联历史页、设置页、币本位模式弹窗和私有 `PnlDisplayMode` 已删除。
+- 旧 `formatTimestamp(...)` 残留已从主文件删除；历史文件有自己的时间格式化实现。
+- 用户本地编译反馈后，已移除 `ui/settings/SettingsScreen.kt` 中错误的 `androidx.compose.ui.input.pointer.consume` 导入；模块排序拖拽仍保留 `change.consume()` 成员调用。
+- 用户本地编译日志显示 `CalculatorScreen.kt` 中 `CoinMarginedModeOption` unresolved reference；已新增主文件本地私有 `ComparisonCoinMarginedModeOption(...)`，并替换对比方案编辑弹窗中的残留调用。
+- 后续用户确认本地编译通过后，本轮又拆分了一个独立模块：`CoinMarketHeader`、`CoinIcon`、`CoinSelectorDialog` 与私有 `CustomCoinDialog` 已迁入 `ui/coin/CoinSelection.kt`；`CalculatorScreen.kt` 通过 `ui.coin` 公开函数继续调用，UI 和图标加载策略保持不变。
 
-- `buildComparisonSchemes(...)` 为主方案传入 `uiState.settlementMode` 与 `uiState.coinMarginedCalculationMode`。
-- `ComparisonSchemeView`、`RankedComparisonScheme` 增加/携带 `settlementMode` 与 `coinMarginedCalculationMode`。
-- 对比方案列表卡片展示币种、结算模式、币本位计算方式和方向。
-- `ComparisonSchemeEditorDialog` 中新增 U 本位/币本位切换；当选择币本位时展示“币数量 / 反向合约”计算方式选项。
-- 对比结果详情页与对比历史快照会展示结算模式和币本位计算方式。
-- 未运行编译或测试。需要用户本地验证是否存在 Compose 调用、数据模型或计算链路问题。
+本轮没有改动计算公式、ViewModel 计算链路或 UI 文案。
 
-特别注意：静态检查已确认 `ComparisonCalculator.kt` 当前仍只调用 `FuturesCalculator()`，没有根据 `ComparisonItem.settlementMode` 或 `coinMarginedCalculationMode` 切换币本位计算。因此当前文档只确认 UI/展示/保存路径已被调整，不能把收益方案对比视为已支持币本位真实计算。下一位 AI 如要继续修复，应在不运行 Gradle 的前提下优先处理该发布风险。
+## 静态检查结果
 
-### 首页模块可见性
+已做非编译检查：
 
-首页模块可见性管理被设计为：
+- 搜索确认 `CalculatorScreen.kt` 不再残留旧的 `HistoryScreen`、`SettingsScreen`、`CoinMarginedModeDialog`、私有 `PnlDisplayMode` 等内联实现。
+- 搜索确认主文件调用已指向 `ui.history` / `ui.settings` 包。
+- 搜索确认设置页中错误的 `androidx.compose.ui.input.pointer.consume` 导入已移除，`change.consume()` 调用保留。
+- 搜索确认 `CalculatorScreen.kt` 不再引用设置页私有 `CoinMarginedModeOption`。
+- 搜索确认 `CalculatorScreen.kt` 不再保留旧币种选择模块函数，`ui.coin` 公开入口已被主文件调用。
+- 简单括号计数确认 `CalculatorScreen.kt`、`SettingsScreen.kt`、`HistoryScreen.kt`、`CoinSelection.kt` 结构平衡。
+- `git diff --check` 无空白错误。
 
-- 核心模块始终显示：`Position`、`TargetStop`、`Result`。
-- 可配置显示模块：`Comparison`、`Averaging`、`History`。
-- `HomeModule.defaultOrder` 不包含 `History`，因为历史记录目前位于底部按钮，不在首页可拖拽模块列表中。
-- `UiPreferencesRepository.saveVisibleModules()` 只持久化可配置模块的隐藏状态，并强制核心模块始终可见。
-- `CalculatorViewModel.resetModuleVisibility()` 将所有模块恢复为可见。
+未做：
 
-### 支持作者入口
+- 未运行 Gradle。
+- 未编译。
+- 未运行测试。
+- 未提交 git。
 
-用户要求首页底部继续保留“支持作者”入口。先前低调版用户认为太低调，最新要求是更显眼一些，但仍不能像广告或博彩软件。当前 `CalculatorScreen.kt` 的 `SupportAuthorCard` 已调整为：
+## 仍需关注的代码风险
 
-- `Card` 使用 `MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.30f)` 背景。
-- 低透明度 `primary` 边框。
-- 左侧 34dp 圆形咖啡图标。
-- 标题：`支持作者`。
-- 副标题：`如果这个工具帮助到了你，\n欢迎支持后续更新。`
-- 右侧显示 `查看` 操作提示。
-- 未使用红色、绿色、金色作为入口强调色。
-
-### 币图标加载方式
-
-最近一次源码修改改为优先解决启动和弹窗卡顿。当前实现要点：
-
-- `CoinAsset` 新增 `iconResourceName`。
-- `CoinRepository.fetchTopCoins()` 不再同步批量下载图标，只解析市场数据并绑定内置图标或已有缓存。
-- `CoinRepository.BUILT_IN_ICON_RESOURCES` 将 BTC、ETH、BNB、SOL、XRP、DOGE、ADA、TRX、LINK、AVAX、TON、SUI、DOT、SHIB、BCH、LTC、NEAR、APT、HBAR、PEPE 映射到 `res/drawable/coin_*.xml`。
-- `CoinRepository.loadIconForCoin()` 用于非内置币按需下载图标，失败 ID 会记录到 `KEY_FAILED_ICON_IDS`，避免重复失败请求。
-- `CalculatorScreen.CoinIcon()` 优先使用 `painterResource(iconResourceName)`，其次使用本地 bitmap 缓存，最后显示字母占位，并在 IO 线程尝试按需加载非内置币图标。
-- `CoinSelectorDialog` 与 `ComparisonCoinSelectorDialog` 当前保留 `LazyColumn` / `items`，以避免一次性组合全部币种行。
-- 注意：这覆盖了上一轮“直接组合全部过滤币种项”的做法；当前以性能优化后的 `LazyColumn` + 内置图标/按需图标加载方案为准。
-
-### 静态页面拆分
-
-最新一次源码修改是低风险拆分 `CalculatorScreen.kt` 中的静态整页页面，目标是降低单文件体积，不改变业务逻辑或文案：
-
-- 新增 `ui/staticpages/StaticPageComponents.kt`：静态页共用布局、按钮和说明段落。
-- 新增 `ui/staticpages/FeedbackScreen.kt`：用户反馈页，包含 GitHub Issue URL 预填和设备信息 helper。
-- 新增 `ui/staticpages/AboutScreen.kt`：关于页，包含版本号、更新时间格式化和打开 GitHub 链接 helper。
-- 新增 `ui/staticpages/PrivacyPolicyScreen.kt` 与 `DisclaimerScreen.kt`：隐私与免责声明静态文案页。
-- 新增 `ui/staticpages/DonationScreen.kt`：打赏页，包含复制收款地址和 `BackHandler`。
-- `CalculatorScreen.kt` 已导入并调用这些页面；原文件仍保留设置主页、模块排序/显隐、主题、盈亏配色、币本位模式、历史记录和主计算相关 UI。
-- 注意：历史记录仍在 `CalculatorScreen.kt` 内，因此 `formatTimestamp(timestamp: Long)` 仍保留在 `CalculatorScreen.kt`。
-
-## 注意事项
-
-- 严格遵守用户当前任务约束：不要执行终端命令、不要运行 Gradle、不要使用 shell。只能使用文件读取/编辑工具。
-- 历史记录目前仍通过首页底部“历史”按钮打开；若要让隐藏历史真正影响底部按钮显示，还需要在 `CalculatorScreen` 底部按钮区域依据 `HomeModule.History in uiState.visibleModules` 条件渲染。
-- 如果未来希望“历史记录”也出现在首页模块拖拽排序中，需要将 `History` 纳入 `HomeModule.defaultOrder`，并在首页模块循环中实现对应 UI，而不只是 `Unit`。
-- 当前未执行编译或测试，需用户本地验证。
-- 本轮文档与静态检查只使用文件读取/编辑工具，没有执行终端、shell、Gradle、编译或测试。
-- `CalculatorScreen.kt` 文件体积很大，后续维护风险高；拆分前需用户明确允许。
-- 静态页面拆分后尚未本地编译验证，尤其需确认新包里的 Compose imports、`SectionPanel` 跨包调用和静态页面返回行为。
+- `CalculatorScreen.kt` 仍约 3149 行，后续维护风险仍高。
+- 最近拆分后的历史、设置、静态页面和币种选择模块尚未由用户本地编译/真机验收。
+- 如果用户再次反馈编译错误，优先让用户贴出完整错误日志；当前上下文中已移除 `consume` 错误导入，并修复 `CalculatorScreen.kt` 对 `CoinMarginedModeOption` 的残留私有 helper 调用。
+- 收益方案对比 UI 已可展示/选择结算模式和币本位计算方式，但此前静态检查确认 `ComparisonCalculator.kt` 仍只调用 `FuturesCalculator()`，尚未完整贯通币本位对比计算链路。
+- 仓库仍跟踪 `futures-calculator/android-app/` 下的早期遗留 Kotlin 文件，处理前不要随意删除。
 
 ## 建议下一步
 
-1. 发布前先决定收益方案对比的币本位入口策略：若不补齐计算链路，应隐藏编辑弹窗中的 U 本位/币本位切换与币本位计算方式选择，避免 UI 误导。
-2. 如决定补齐链路，应静态修改 `CalculatorViewModel.kt` / `ComparisonCalculator.kt`，让 `ComparisonItem.settlementMode` 和 `coinMarginedCalculationMode` 真正参与计算；仍不要运行 Gradle。
-3. 用户本地编译，确认新增参数与 Compose 调用链无编译错误。
-4. 手动检查币种图标性能：App 启动不应等待全部图标下载，币种选择弹窗和对比方案币种选择弹窗应快速打开，列表能滚动，搜索过滤正常，热门币内置图标正常显示。
-5. 手动检查首页底部“支持作者”入口是否更显眼但不广告化，且点击仍能进入支持作者页面。
-6. 手动检查设置页静态页面：用户反馈、关于 App、隐私政策、免责声明均可打开返回；反馈提交能打开 GitHub Issue 页面，关于页能打开 GitHub 项目。
-7. 手动测试收益方案对比：新增方案、编辑方案、方案列表展示、对比结果详情、历史快照。
-8. 手动测试设置页“模块显示管理”。
-9. 决定“历史记录”隐藏开关是否应控制底部历史按钮显示。
+继续拆分 `CalculatorScreen.kt` 时，一次只选择一个大功能模块，并保持 UI/文案/计算行为不变。可选方向：
+
+- 收益方案对比编辑/结果展示。
+- 补仓决策模拟。
+- 主结果/币本位结果详情弹窗。
+
+每轮完成后只做静态检查并同步文档，构建、编译和测试交给用户本地执行。

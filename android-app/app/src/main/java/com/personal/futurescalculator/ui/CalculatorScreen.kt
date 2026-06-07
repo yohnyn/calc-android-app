@@ -25,10 +25,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -103,13 +103,16 @@ import com.personal.futurescalculator.ui.theme.ProfitLossPalette
 import com.personal.futurescalculator.ui.theme.WarningAmber
 import com.personal.futurescalculator.util.ClipboardFormatter
 import com.personal.futurescalculator.util.DecimalFormatters
+import com.personal.futurescalculator.data.CoinRepository
 import com.personal.futurescalculator.viewmodel.CalculatorViewModel
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 private const val RESULT_CARD_MAIN = "main"
@@ -837,10 +840,34 @@ private fun CoinMarketHeader(
 
 @Composable
 private fun CoinIcon(coin: CoinAsset?, size: Int) {
-    val bitmap = remember(coin?.iconPath) {
-        coin?.iconPath?.let { path -> BitmapFactory.decodeFile(path)?.asImageBitmap() }
+    val context = LocalContext.current
+    val repository = remember(context) { CoinRepository(context) }
+    var lazyIconPath by remember(coin?.id, coin?.iconPath) { mutableStateOf(coin?.iconPath) }
+    val resourceId = remember(coin?.iconResourceName) {
+        coin?.iconResourceName?.let { name ->
+            context.resources.getIdentifier(name, "drawable", context.packageName)
+        } ?: 0
     }
-    if (bitmap != null) {
+    val bitmap = remember(lazyIconPath) {
+        lazyIconPath?.let { path -> BitmapFactory.decodeFile(path)?.asImageBitmap() }
+    }
+
+    LaunchedEffect(coin?.id, coin?.iconResourceName, lazyIconPath) {
+        val current = coin ?: return@LaunchedEffect
+        if (current.iconResourceName == null && lazyIconPath == null && !current.isCustom) {
+            val loaded = withContext(Dispatchers.IO) { repository.loadIconForCoin(current) }
+            lazyIconPath = loaded.iconPath
+        }
+    }
+
+    if (resourceId != 0) {
+        Image(
+            painter = androidx.compose.ui.res.painterResource(id = resourceId),
+            contentDescription = coin?.symbol,
+            modifier = Modifier.width(size.dp).height(size.dp).clip(CircleShape),
+            contentScale = ContentScale.Fit
+        )
+    } else if (bitmap != null) {
         Image(
             bitmap = bitmap,
             contentDescription = coin?.symbol,
@@ -871,26 +898,51 @@ private fun SupportAuthorCard(onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = MaterialTheme.shapes.medium,
+        shape = MaterialTheme.shapes.small,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.52f)
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.30f)
         ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.22f))
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.24f))
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp)
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            Surface(
+                modifier = Modifier.width(34.dp).height(34.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "☕",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    text = "支持作者",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "如果这个工具帮助到了你，\n欢迎支持后续更新。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             Text(
-                text = "✨ 支持作者",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-            Text(
-                text = "喜欢这个小工具？你的支持会让我更有动力继续打磨它。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = "查看",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary
             )
         }
     }

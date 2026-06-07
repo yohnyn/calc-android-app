@@ -37,7 +37,7 @@ class CoinRepository(context: Context) {
         return try {
             if (connection.responseCode !in 200..299) error("HTTP ${connection.responseCode}")
             val body = connection.inputStream.bufferedReader().use { it.readText() }
-            val coins = parseMarketResponse(body).map(::downloadIcon)
+            val coins = parseMarketResponse(body).map(::withAvailableLocalIcon)
             preferences.edit()
                 .putString(KEY_COINS, serializeCoins(coins))
                 .putLong(KEY_UPDATED_AT, System.currentTimeMillis())
@@ -65,7 +65,8 @@ class CoinRepository(context: Context) {
                         name = name,
                         priceUsdt = price,
                         marketRank = item.optInt("market_cap_rank").takeIf { it > 0 },
-                        iconUrl = item.optString("image").takeIf { it.isNotBlank() }
+                        iconUrl = item.optString("image").takeIf { it.isNotBlank() },
+                        iconResourceName = BUILT_IN_ICON_RESOURCES[symbol]
                     )
                 )
                 if (size == COIN_LIMIT) break
@@ -88,9 +89,10 @@ class CoinRepository(context: Context) {
                             isCustom = item.optBoolean("custom", false),
                             marketRank = item.optInt("rank").takeIf { it > 0 },
                             iconUrl = item.optString("icon_url").takeIf { it.isNotBlank() },
-                            iconPath = item.optString("icon_path").takeIf { it.isNotBlank() && File(it).exists() }
+                            iconPath = item.optString("icon_path").takeIf { it.isNotBlank() && File(it).exists() },
+                            iconResourceName = item.optString("icon_resource_name").takeIf { it.isNotBlank() }
                         )
-                    if (coin.isCustom || !isStableCoin(coin.id, coin.symbol, coin.name)) add(coin)
+                    if (coin.isCustom || !isStableCoin(coin.id, coin.symbol, coin.name)) add(withAvailableLocalIcon(coin))
                 }
             }
         }.getOrDefault(emptyList())
@@ -109,14 +111,29 @@ class CoinRepository(context: Context) {
                     .put("rank", coin.marketRank)
                     .put("icon_url", coin.iconUrl)
                     .put("icon_path", coin.iconPath)
+                    .put("icon_resource_name", coin.iconResourceName)
             )
         }
         return array.toString()
     }
 
+    private fun withAvailableLocalIcon(coin: CoinAsset): CoinAsset {
+        val builtInResource = BUILT_IN_ICON_RESOURCES[coin.symbol.uppercase()]
+        if (builtInResource != null) {
+            return coin.copy(iconResourceName = builtInResource, iconPath = null)
+        }
+        return coin.withExistingIcon()
+    }
+
     private fun CoinAsset.withExistingIcon(): CoinAsset {
         val file = iconFile(id)
         return if (file.exists()) copy(iconPath = file.absolutePath) else copy(iconPath = null)
+    }
+
+    fun loadIconForCoin(coin: CoinAsset): CoinAsset {
+        if (coin.isCustom || coin.iconResourceName != null) return coin
+        if (coin.id in loadFailedIconIds()) return coin.withExistingIcon()
+        return downloadIcon(coin)
     }
 
     private fun downloadIcon(coin: CoinAsset): CoinAsset {
@@ -131,19 +148,30 @@ class CoinRepository(context: Context) {
         connection.readTimeout = 15_000
         connection.requestMethod = "GET"
         return try {
-            if (connection.responseCode !in 200..299) return coin.copy(iconPath = null)
+            if (connection.responseCode !in 200..299) return coin.markIconFailed()
             val bytes = connection.inputStream.use { it.readBytes() }
             if (bytes.isEmpty() || BitmapFactory.decodeByteArray(bytes, 0, bytes.size) == null) {
-                return coin.copy(iconUrl = url, iconPath = null)
+                return coin.copy(iconUrl = url).markIconFailed()
             }
             file.writeBytes(bytes)
             coin.copy(iconUrl = url, iconPath = file.absolutePath)
         } catch (_: Exception) {
             file.delete()
-            coin.copy(iconPath = null)
+            coin.markIconFailed()
         } finally {
             connection.disconnect()
         }
+    }
+
+    private fun CoinAsset.markIconFailed(): CoinAsset {
+        saveFailedIconIds(loadFailedIconIds() + id)
+        return copy(iconPath = null)
+    }
+
+    private fun loadFailedIconIds(): Set<String> = preferences.getStringSet(KEY_FAILED_ICON_IDS, emptySet()).orEmpty()
+
+    private fun saveFailedIconIds(ids: Set<String>) {
+        preferences.edit().putStringSet(KEY_FAILED_ICON_IDS, ids).apply()
     }
 
     private fun fetchCoinIconUrl(id: String): String? {
@@ -183,6 +211,7 @@ class CoinRepository(context: Context) {
         const val KEY_CUSTOM_COINS = "custom_coins"
         const val KEY_SELECTED = "selected_coin"
         const val KEY_UPDATED_AT = "updated_at"
+        const val KEY_FAILED_ICON_IDS = "failed_icon_ids"
         const val COIN_LIMIT = 100
         const val COINGECKO_MARKETS_URL =
             "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=150&page=1&sparkline=false&precision=full"
@@ -196,6 +225,28 @@ class CoinRepository(context: Context) {
             "tether", "usd-coin", "dai", "first-digital-usd", "ethena-usde", "usds",
             "true-usd", "paypal-usd", "usdd", "frax", "gemini-dollar", "liquity-usd",
             "usual-usd", "usdb", "euro-coin", "tether-eurt", "tether-gold", "pax-gold"
+        )
+        val BUILT_IN_ICON_RESOURCES = mapOf(
+            "BTC" to "coin_btc",
+            "ETH" to "coin_eth",
+            "BNB" to "coin_bnb",
+            "SOL" to "coin_sol",
+            "XRP" to "coin_xrp",
+            "DOGE" to "coin_doge",
+            "ADA" to "coin_ada",
+            "TRX" to "coin_trx",
+            "LINK" to "coin_link",
+            "AVAX" to "coin_avax",
+            "TON" to "coin_ton",
+            "SUI" to "coin_sui",
+            "DOT" to "coin_dot",
+            "SHIB" to "coin_shib",
+            "BCH" to "coin_bch",
+            "LTC" to "coin_ltc",
+            "NEAR" to "coin_near",
+            "APT" to "coin_apt",
+            "HBAR" to "coin_hbar",
+            "PEPE" to "coin_pepe"
         )
     }
 }

@@ -10,5 +10,6 @@ data class CoinAsset(
     val isCustom: Boolean = false,
     val marketRank: Int? = null,
     val iconUrl: String? = null,
-    val iconPath: String? = null
+    val iconPath: String? = null,
+    val iconResourceName: String? = null
 )

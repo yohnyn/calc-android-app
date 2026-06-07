@@ -154,6 +154,10 @@
 - 2026-06-07 用户本地编译反馈后修复：移除已拆出的 `ui/settings/SettingsScreen.kt` 中错误的 `androidx.compose.ui.input.pointer.consume` 导入，保留模块排序拖拽里的 `change.consume()` 成员调用；同时复查主文件导入、公开入口和括号结构。该轮仍未运行 Gradle、编译或测试。
 - 2026-06-07 用户本地编译反馈后继续修复：`CalculatorScreen.kt` 对比方案编辑弹窗仍调用已拆入设置页的私有 `CoinMarginedModeOption`，导致 unresolved reference；已改为主文件本地私有 `ComparisonCoinMarginedModeOption`，保持原 UI 样式和交互。该轮仍未运行 Gradle、编译或测试。
 - 2026-06-07 币种选择模块拆分完成：`CoinMarketHeader`、`CoinIcon`、`CoinSelectorDialog` 与私有 `CustomCoinDialog` 已从 `CalculatorScreen.kt` 拆到 `android-app/app/src/main/java/com/personal/futurescalculator/ui/coin/CoinSelection.kt`；主文件改为导入 `ui.coin` 公开入口，原 UI、图标加载策略和自定义币种交互保持不变。该轮仅做非编译静态检查，未运行 Gradle、编译或测试。
+- 2026-06-07 补仓决策模拟模块拆分完成：`ExistingScheme`、`averagingMissingFields`、补仓入口卡、补仓输入区、选择已有方案填入弹窗、补仓结果弹窗和补仓结果卡已从 `CalculatorScreen.kt` 拆到 `android-app/app/src/main/java/com/personal/futurescalculator/ui/averaging/AveragingDecisionUi.kt`；主文件改为导入 `ui.averaging` 公开入口，原 UI 与交互保持不变。该轮仅做非编译静态检查，未运行 Gradle、编译或测试。
+- 2026-06-07 结果展示模块拆分完成：主结果弹窗、币本位结果弹窗、结果卡、简略展开卡、指标块、风险块、盈亏颜色/图标 helper 已从 `CalculatorScreen.kt` 拆到 `android-app/app/src/main/java/com/personal/futurescalculator/ui/results/ResultUi.kt`；主文件改为导入 `ui.results` 公开入口，原 UI 与交互保持不变。该轮仅做非编译静态检查，未运行 Gradle、编译或测试。
+- 2026-06-07 收益方案对比模块拆分完成：对比方案视图、添加/编辑弹窗、方案选择列表、收益对比结果弹窗、对比历史快照、收益差距/排序/详情 helper 和对比币种选择弹窗已从 `CalculatorScreen.kt` 拆到 `android-app/app/src/main/java/com/personal/futurescalculator/ui/comparison/ComparisonUi.kt`；主文件改为导入 `ui.comparison` 公开入口，原 UI 与交互保持不变。该轮仅做非编译静态检查，未运行 Gradle、编译或测试。
+- 2026-06-07 主屏输入结构与对比方案弹窗 UI 调整：`平仓价` 已移入“仓位参数”；原“目标与止损”改为默认收起的“止盈止损”；`账户总资金` 移入止盈止损展开区；止盈/止损目标文案统一为目标收益与目标亏损；添加/编辑对比方案弹窗改为“基础信息 / 交易设置 / 价格与仓位”分组，并将币本位计算方式改为并排紧凑选项。该轮仅做非编译静态检查，未运行 Gradle、编译或测试。
 
 当前仓储使用 `SharedPreferences`。
 
@@ -178,13 +182,17 @@
 - 最近一次支持作者入口样式已调整为更显眼的主题色 Card，尚未由用户本地编译或真机验收
 - 最近一次静态页面、历史页面和设置页面拆分尚未由用户本地编译或真机验收；重点确认设置页中的用户反馈、关于、隐私政策、免责声明、模块排序/显隐、主题/盈亏配色、币本位模式，以及首页底部支持作者入口和历史列表/详情均可正常打开和返回
 - 最近一次币种选择与图标 UI 拆分尚未由用户本地编译或真机验收；重点确认首页币种卡片、币种选择弹窗搜索/选择、自定义币种新增/删除、内置图标/缓存图标/字母占位和非内置图标按需加载
+- 最近一次补仓决策模拟 UI 拆分尚未由用户本地编译或真机验收；重点确认补仓入口展开/收起、选择已有方案填入、币种单位同步、补仓金额/数量二选一、结果弹窗和关闭后的简略卡片
+- 最近一次结果展示 UI 和收益方案对比 UI 拆分尚未由用户本地编译或真机验收；重点确认主结果弹窗、币本位结果弹窗、首页简略结果卡、净盈亏/ROI/手续费/强平价/风险等级展示，以及收益方案对比选择/添加/编辑/删除/弹窗结果/历史保存
+- 最近一次主屏输入结构与止盈止损 UI 调整尚未由用户本地编译或真机验收；重点确认平仓价移入仓位参数、止盈止损默认收起/展开、账户总资金位置、止盈止损目标反推详情弹窗，以及添加/编辑对比方案弹窗新分组布局
 - 用户本地编译曾反馈 `CalculatorScreen.kt` 拆分后存在错误，本轮已按日志修复对设置页私有 `CoinMarginedModeOption` 的残留调用，并移除设置页拖拽 `consume` 的错误导入；仍需用户再次本地编译确认是否还有其他错误日志
 - 对比方案 UI 已可选择币本位和币本位计算方式，但静态检查已确认 `ComparisonCalculator.kt` 尚未使用这些字段进行币本位计算；当前属于展示/保存层面的增强，发布前建议隐藏入口或补齐计算链路
+- 当前 `CalculationInput` 尚无独立的直接 `止盈价` / `止损价` 字段；现有止盈止损仍通过目标收益/ROI、目标亏损/ROI 反推价格。后续若要支持直接填写止盈价和止损价，需要同步扩展模型、计算、结果展示、历史保存和复制文案
 - 本轮拆分只执行源码阅读、局部编辑和非编译静态检查；未运行 Gradle、编译或测试，也未提交 git
 - UI 是否完整符合 `APP_DEVELOPMENT_SPEC.md`，尤其是竖屏布局、深色模式和交互细节
 - 数值边界、ROI、币本位公式及强平估算是否符合预期
 - 仓库仍跟踪 `futures-calculator/android-app/` 下的 3 个早期遗留 Kotlin 文件，存在误改风险
-- `CalculatorScreen.kt` 仍约 3149 行，后续维护风险较高；后续拆分应继续遵循“每次只拆一个大功能模块、保持 UI 与计算行为不变”的节奏
+- `CalculatorScreen.kt` 仍约 1147 行，后续维护风险已下降但仍偏大；后续拆分应继续遵循“每次只拆一个大功能模块、保持 UI 与计算行为不变”的节奏
 - 当前网络与本地持久化实现需要在真机上验证失败降级、隐私说明和数据兼容性
 
 ---
@@ -225,7 +233,7 @@
 优先级 P2：
 
 - 在用户允许后评估拆分超大的 `CalculatorScreen.kt`
-- 继续按低风险方式拆分 `CalculatorScreen.kt`：下一步应选择一个独立大功能模块，例如对比方案、补仓决策模拟或结果详情弹窗；每次只迁移一组页面/组件并保持文案、UI 与计算行为不变
+- 继续按低风险方式拆分 `CalculatorScreen.kt`：下一步可考虑主屏输入表单/仓位参数区域、费用设置与主屏辅助弹窗、首页模块容器与底部操作区；每次只迁移一组页面/组件并保持文案、UI 与计算行为不变
 - 继续优化 UI 细节和体验
 - 新增功能前先更新规范并确认范围
 
@@ -241,9 +249,13 @@
 
 - 已完成上一轮未完成的历史/设置拆分迁移：`CalculatorScreen.kt` 改为使用 `ui.history` 与 `ui.settings` 包中的公开页面/枚举/弹窗实现，并删除主文件中的旧内联实现
 - 已完成币种选择与图标 UI 拆分：新增 `ui/coin/CoinSelection.kt`，迁出 `CoinMarketHeader`、`CoinIcon`、`CoinSelectorDialog` 与私有 `CustomCoinDialog`
+- 已完成补仓决策模拟 UI 拆分：新增 `ui/averaging/AveragingDecisionUi.kt`，迁出补仓入口、补仓输入区、已有方案填入、补仓结果弹窗和相关补仓 UI helper
+- 已完成结果展示 UI 拆分：新增 `ui/results/ResultUi.kt`，迁出主结果/币本位结果弹窗、结果卡、简略展开卡、指标块、风险块和盈亏颜色/图标 helper
+- 已完成收益方案对比 UI 拆分：新增 `ui/comparison/ComparisonUi.kt`，迁出对比方案视图构建、添加/编辑弹窗、方案选择列表、收益对比结果弹窗、对比历史快照和相关对比 UI helper；`CalculatorScreen.kt` 当前约 1147 行
+- 已完成主屏输入结构与止盈止损 UI 调整：`平仓价` 移入仓位参数，`止盈止损` 默认收起，`账户总资金` 移入止盈止损展开区；主结果弹窗允许展示只有止盈止损反推价、没有单一净盈亏的结果；添加/编辑对比方案弹窗改为分组布局
 - 已根据用户本地编译反馈移除 `SettingsScreen.kt` 中错误的 `androidx.compose.ui.input.pointer.consume` 导入，并保留拖拽手势里的 `change.consume()` 调用
 - 已根据用户本地编译日志修复 `CalculatorScreen.kt` 中 `CoinMarginedModeOption` unresolved reference：新增本地 `ComparisonCoinMarginedModeOption` 并替换对比方案编辑弹窗中的残留调用
-- 已执行非编译静态检查：确认主文件中不再残留旧历史/设置实现和旧币种选择模块实现，且 `git diff --check` 无空白错误
+- 已执行非编译静态检查：确认主文件中不再残留旧历史/设置实现、旧币种选择模块实现、旧补仓决策模拟实现、旧结果展示实现和旧收益方案对比实现；本轮检查 `CalculatorScreen.kt`、`ComparisonUi.kt`、`ResultUi.kt`、`HomeModule.kt`、`SettingsScreen.kt` 括号结构平衡，且 `git diff --check` 无空白错误
 - 已按用户要求同步三份交接文档；未运行 Gradle、编译、测试，也未提交 git
 - 已记录最近 `CalculatorScreen.kt` 收益方案对比 UI 变更：对比方案编辑弹窗支持结算模式切换与币本位计算方式选择，方案列表/详情/历史快照展示对应字段
 - 已按最新性能目标调整币图标相关列表与加载方式：币种选择弹窗和对比方案币种选择弹窗保留 `LazyColumn` / `items` 可见项组合策略，避免一次性组合全部币种行；图标改为内置资源优先、缓存优先、非内置图标按需后台加载

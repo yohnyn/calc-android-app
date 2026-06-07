@@ -519,7 +519,7 @@ private fun ModuleVisibilityScreen(
     SettingsPageLayout(title = "模块显示管理", onBack = onBack) {
         SectionPanel(title = "首页模块") {
             Text(
-                text = "仓位参数、目标与止损、计算结果为核心模块，始终显示。这里只管理收益方案对比、补仓决策模拟和历史记录。",
+                text = "仓位参数、止盈止损、计算结果为核心模块，始终显示。这里只管理收益方案对比、补仓决策模拟和历史记录。",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

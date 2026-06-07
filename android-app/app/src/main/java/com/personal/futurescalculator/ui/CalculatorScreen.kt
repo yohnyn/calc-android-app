@@ -1,10 +1,6 @@
 package com.personal.futurescalculator.ui
 
-import android.content.Context
-import android.content.Intent
 import android.graphics.BitmapFactory
-import android.net.Uri
-import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
@@ -101,6 +97,11 @@ import com.personal.futurescalculator.ui.theme.LocalProfitLossPalette
 import com.personal.futurescalculator.ui.theme.ProfitGreen
 import com.personal.futurescalculator.ui.theme.ProfitLossPalette
 import com.personal.futurescalculator.ui.theme.WarningAmber
+import com.personal.futurescalculator.ui.staticpages.AboutScreen
+import com.personal.futurescalculator.ui.staticpages.DisclaimerScreen
+import com.personal.futurescalculator.ui.staticpages.DonationScreen
+import com.personal.futurescalculator.ui.staticpages.FeedbackScreen
+import com.personal.futurescalculator.ui.staticpages.PrivacyPolicyScreen
 import com.personal.futurescalculator.util.ClipboardFormatter
 import com.personal.futurescalculator.util.DecimalFormatters
 import com.personal.futurescalculator.data.CoinRepository
@@ -4002,93 +4003,6 @@ private fun ModuleVisibilityScreen(
 }
 
 @Composable
-private fun FeedbackScreen(
-    feedbackText: String,
-    onFeedbackChange: (String) -> Unit,
-    onBack: () -> Unit
-) {
-    val context = LocalContext.current
-    SettingsPageLayout(title = "用户反馈", onBack = onBack) {
-        SectionPanel(title = "反馈内容") {
-            OutlinedTextField(
-                value = feedbackText,
-                onValueChange = onFeedbackChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("建议或问题") },
-                minLines = 5,
-                maxLines = 9
-            )
-            Text(
-                text = "提交后将打开 GitHub Issue 页面，并附带 App 版本、Android 版本、手机型号和提交时间。请确认内容后再创建 Issue。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = "不会附带收益计算参数、收款地址或其他应用输入内容。",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Button(
-                onClick = { openFeedbackIssue(context, feedbackText) },
-                enabled = feedbackText.isNotBlank(),
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.small
-            ) {
-                Text("提交反馈")
-            }
-        }
-    }
-}
-
-@Composable
-private fun AboutScreen(priceUpdatedAt: Long?, onBack: () -> Unit) {
-    val context = LocalContext.current
-    val version = appVersion(context)
-    SettingsPageLayout(title = "关于 App", onBack = onBack) {
-        SectionPanel(title = "仓位助手") {
-            DisclaimerParagraph("版本：$version")
-            DisclaimerParagraph("用于多币种 U 本位、币本位合约的收益、风险、目标止损、补仓和方案对比估算。")
-            DisclaimerParagraph("价格数据来源：CoinGecko 公共 API。")
-            DisclaimerParagraph("价格更新时间：${priceUpdatedAt?.let(::formatTimestamp) ?: "暂无缓存"}")
-            DisclaimerParagraph("本工具仅提供计算和模拟功能，不构成投资建议。")
-            DisclaimerParagraph("用户应自行承担交易风险。")
-            SoftOutlinedButton(
-                onClick = { openUrl(context, GITHUB_REPOSITORY_URL) },
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.small
-            ) {
-                Text("打开 GitHub 项目")
-            }
-        }
-    }
-}
-
-@Composable
-private fun PrivacyPolicyScreen(onBack: () -> Unit) {
-    SettingsPageLayout(title = "隐私政策", onBack = onBack) {
-        SectionPanel(title = "数据与隐私") {
-            DisclaimerParagraph("App 每次启动时会联网获取市值前 100 币种的公开价格，并将价格和更新时间缓存到本地设备。")
-            DisclaimerParagraph("所有收益、补仓和方案对比计算均在设备本地完成，不上传交易数据。")
-            DisclaimerParagraph("本软件不连接交易所账户，不读取账户，也不执行任何交易操作。")
-            DisclaimerParagraph("用户添加的自定义币种名称和价格仅保存在本地设备，不会上传服务器。")
-            DisclaimerParagraph("只有当你主动点击“提交反馈”时，系统才会打开 GitHub Issue 页面，并预填你输入的反馈、App 版本、Android 版本、手机型号和提交时间。")
-            DisclaimerParagraph("创建 Issue 前，你可以在 GitHub 页面检查、修改或取消提交。Issue 创建后，其内容将受 GitHub 的隐私政策和仓库可见性规则约束。")
-        }
-    }
-}
-
-@Composable
-private fun DisclaimerScreen(onBack: () -> Unit) {
-    SettingsPageLayout(title = "免责声明", onBack = onBack) {
-        SectionPanel(title = "风险说明") {
-            DisclaimerParagraph("本工具仅用于收益、风险和补仓价格估算，仅供参考，不构成任何投资建议。")
-            DisclaimerParagraph("强平价采用简化公式估算。真实强平价会受到交易所规则、钱包余额、阶梯维持保证金、其他仓位、手续费和资金费率等因素影响。")
-            DisclaimerParagraph("数字资产交易具有高风险，请根据自身情况独立判断，并以交易所实际数据为准。")
-        }
-    }
-}
-
-@Composable
 private fun SettingsPageLayout(
     title: String,
     onBack: () -> Unit,
@@ -4189,101 +4103,6 @@ private fun ColorResultPreview(
 }
 
 @Composable
-private fun DonationScreen(onBack: () -> Unit) {
-    val clipboardManager = LocalClipboardManager.current
-    val context = LocalContext.current
-    BackHandler(onBack = onBack)
-
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                text = "🌟 一起让它更好",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.52f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.24f))
-            ) {
-                Column(
-                    modifier = Modifier.padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "♥",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = LossRed
-                        )
-                        Text(
-                            text = "谢谢你的支持",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                    Text(
-                        text = "如果你愿意支持后续更新，可以随心表达心意。每一份支持，都会让我更有动力把这个小工具继续做好。",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            SectionPanel(title = "收款地址") {
-                Text(
-                    text = DONATION_ADDRESS,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Button(
-                    onClick = {
-                        clipboardManager.setText(AnnotatedString(DONATION_ADDRESS))
-                        Toast.makeText(context, "收款地址已复制", Toast.LENGTH_SHORT).show()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.small
-                ) {
-                    Text("点击复制收款地址")
-                }
-            }
-            SoftOutlinedButton(
-                onClick = onBack,
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.small
-            ) {
-                Text("返回计算器")
-            }
-        }
-    }
-}
-
-@Composable
-private fun DisclaimerParagraph(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-}
-
-@Composable
 private fun pnlColor(value: BigDecimal?): androidx.compose.ui.graphics.Color {
     val palette = LocalProfitLossPalette.current
     return when {
@@ -4322,56 +4141,8 @@ private fun targetPriceSupporting(amountPrice: BigDecimal?, roiPrice: BigDecimal
     }
 }
 
-private fun openFeedbackIssue(context: Context, feedbackText: String) {
-    val titleSummary = feedbackText.lineSequence().firstOrNull().orEmpty().take(42)
-    val submittedAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z", Locale.getDefault()).format(Date())
-    val issueBody = buildString {
-        appendLine("## 用户反馈")
-        appendLine()
-        appendLine(feedbackText.trim())
-        appendLine()
-        appendLine("## 设备信息")
-        appendLine()
-        appendLine("- App 版本：${appVersion(context)}")
-        appendLine("- Android 版本：${Build.VERSION.RELEASE}（API ${Build.VERSION.SDK_INT}）")
-        appendLine("- 手机型号：${Build.MANUFACTURER} ${Build.MODEL}")
-        appendLine("- 提交时间：$submittedAt")
-        appendLine()
-        append("> 此 Issue 由仓位助手反馈页面预填，用户已在 GitHub 页面确认后提交。")
-    }
-    val issueUrl = Uri.parse(GITHUB_ISSUE_URL)
-        .buildUpon()
-        .appendQueryParameter("title", "[用户反馈] $titleSummary")
-        .appendQueryParameter("body", issueBody)
-        .build()
-
-    runCatching {
-        context.startActivity(Intent(Intent.ACTION_VIEW, issueUrl))
-    }.onFailure {
-        Toast.makeText(context, "无法打开 GitHub，请检查浏览器设置", Toast.LENGTH_SHORT).show()
-    }
-}
-
-private fun openUrl(context: Context, url: String) {
-    runCatching {
-        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-    }.onFailure {
-        Toast.makeText(context, "无法打开链接", Toast.LENGTH_SHORT).show()
-    }
-}
-
-@Suppress("DEPRECATION")
-private fun appVersion(context: Context): String {
-    return runCatching {
-        context.packageManager.getPackageInfo(context.packageName, 0).versionName
-    }.getOrNull() ?: "未知"
-}
-
 private fun formatTimestamp(timestamp: Long): String {
     return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
 }
 
-private const val DONATION_ADDRESS = "请在此处添加你的收款地址"
-private const val GITHUB_REPOSITORY_URL = "https://github.com/yohnyn/calc-android-app"
-private const val GITHUB_ISSUE_URL = "$GITHUB_REPOSITORY_URL/issues/new"
 private const val MAIN_SCHEME_ID = "main_scheme"

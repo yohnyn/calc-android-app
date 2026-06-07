@@ -23,6 +23,7 @@
 - `android-app/app/src/main/java/com/personal/futurescalculator/model/CoinAsset.kt`：币种模型，包含 `iconUrl`、本地缓存 `iconPath` 与内置图标 `iconResourceName`。
 - `android-app/app/src/main/java/com/personal/futurescalculator/data/CoinRepository.kt`：币价获取、自定义币、图标资源映射与按需图标缓存。
 - `android-app/app/src/main/java/com/personal/futurescalculator/ui/CalculatorScreen.kt`：Compose UI，包括首页、设置页、模块显示管理页面和 `CoinIcon` 图标渲染。
+- `android-app/app/src/main/java/com/personal/futurescalculator/ui/staticpages/`：已拆出的静态整页 UI，包括用户反馈、关于 App、隐私政策、免责声明和打赏页面。
 
 ## 最近代码状态
 
@@ -73,6 +74,18 @@
 - `CoinSelectorDialog` 与 `ComparisonCoinSelectorDialog` 当前保留 `LazyColumn` / `items`，以避免一次性组合全部币种行。
 - 注意：这覆盖了上一轮“直接组合全部过滤币种项”的做法；当前以性能优化后的 `LazyColumn` + 内置图标/按需图标加载方案为准。
 
+### 静态页面拆分
+
+最新一次源码修改是低风险拆分 `CalculatorScreen.kt` 中的静态整页页面，目标是降低单文件体积，不改变业务逻辑或文案：
+
+- 新增 `ui/staticpages/StaticPageComponents.kt`：静态页共用布局、按钮和说明段落。
+- 新增 `ui/staticpages/FeedbackScreen.kt`：用户反馈页，包含 GitHub Issue URL 预填和设备信息 helper。
+- 新增 `ui/staticpages/AboutScreen.kt`：关于页，包含版本号、更新时间格式化和打开 GitHub 链接 helper。
+- 新增 `ui/staticpages/PrivacyPolicyScreen.kt` 与 `DisclaimerScreen.kt`：隐私与免责声明静态文案页。
+- 新增 `ui/staticpages/DonationScreen.kt`：打赏页，包含复制收款地址和 `BackHandler`。
+- `CalculatorScreen.kt` 已导入并调用这些页面；原文件仍保留设置主页、模块排序/显隐、主题、盈亏配色、币本位模式、历史记录和主计算相关 UI。
+- 注意：历史记录仍在 `CalculatorScreen.kt` 内，因此 `formatTimestamp(timestamp: Long)` 仍保留在 `CalculatorScreen.kt`。
+
 ## 注意事项
 
 - 严格遵守用户当前任务约束：不要执行终端命令、不要运行 Gradle、不要使用 shell。只能使用文件读取/编辑工具。
@@ -81,6 +94,7 @@
 - 当前未执行编译或测试，需用户本地验证。
 - 本轮文档与静态检查只使用文件读取/编辑工具，没有执行终端、shell、Gradle、编译或测试。
 - `CalculatorScreen.kt` 文件体积很大，后续维护风险高；拆分前需用户明确允许。
+- 静态页面拆分后尚未本地编译验证，尤其需确认新包里的 Compose imports、`SectionPanel` 跨包调用和静态页面返回行为。
 
 ## 建议下一步
 
@@ -89,6 +103,7 @@
 3. 用户本地编译，确认新增参数与 Compose 调用链无编译错误。
 4. 手动检查币种图标性能：App 启动不应等待全部图标下载，币种选择弹窗和对比方案币种选择弹窗应快速打开，列表能滚动，搜索过滤正常，热门币内置图标正常显示。
 5. 手动检查首页底部“支持作者”入口是否更显眼但不广告化，且点击仍能进入支持作者页面。
-6. 手动测试收益方案对比：新增方案、编辑方案、方案列表展示、对比结果详情、历史快照。
-7. 手动测试设置页“模块显示管理”。
-8. 决定“历史记录”隐藏开关是否应控制底部历史按钮显示。
+6. 手动检查设置页静态页面：用户反馈、关于 App、隐私政策、免责声明均可打开返回；反馈提交能打开 GitHub Issue 页面，关于页能打开 GitHub 项目。
+7. 手动测试收益方案对比：新增方案、编辑方案、方案列表展示、对比结果详情、历史快照。
+8. 手动测试设置页“模块显示管理”。
+9. 决定“历史记录”隐藏开关是否应控制底部历史按钮显示。

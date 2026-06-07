@@ -149,6 +149,7 @@
 - 首页底部“支持作者”入口保留，并调整为更显眼但克制的主题色 Card：使用低透明度 primaryContainer 背景、primary 细边框、圆形咖啡图标、标题/副标题与“查看”操作提示
 - 最近一次源码变更涉及 `CalculatorScreen.kt` 的收益方案对比 UI：主方案视图传入结算模式，对比方案编辑弹窗可切换 U 本位/币本位，列表/详情/历史快照展示结算模式和币本位计算方式；尚未编译验证
 - 2026-06-07 静态检查确认：`ComparisonCalculator.kt` 当前仍只调用 `FuturesCalculator()`，尚未根据 `ComparisonItem.settlementMode` 或 `coinMarginedCalculationMode` 切换到币本位计算链路。因此收益方案对比中的币本位字段目前应视为 UI/展示/保存层状态，不能视为已完成币本位对比计算支持。
+- 2026-06-07 静态页面拆分：用户反馈、关于 App、隐私政策、免责声明和打赏页面已从 `CalculatorScreen.kt` 拆到 `android-app/app/src/main/java/com/personal/futurescalculator/ui/staticpages/`；`CalculatorScreen.kt` 仍保留设置主页、模块排序/显隐、主题、盈亏配色、币本位模式、历史记录等非静态/状态相关页面。
 
 当前仓储使用 `SharedPreferences`。
 
@@ -171,6 +172,7 @@
 - 最近一次源码变更为 `CalculatorScreen.kt` 收益方案对比参数展示/编辑调整，尚未由用户本地编译或真机验收
 - 最近一次币种图标加载性能优化尚未由用户本地编译或真机验收；重点验证启动速度、币种弹窗打开速度、内置图标显示和非内置图标后台补全
 - 最近一次支持作者入口样式已调整为更显眼的主题色 Card，尚未由用户本地编译或真机验收
+- 最近一次静态页面拆分尚未由用户本地编译或真机验收；重点确认设置页中的用户反馈、关于、隐私政策、免责声明，以及首页底部支持作者入口均可正常打开和返回
 - 对比方案 UI 已可选择币本位和币本位计算方式，但静态检查已确认 `ComparisonCalculator.kt` 尚未使用这些字段进行币本位计算；当前属于展示/保存层面的增强，发布前建议隐藏入口或补齐计算链路
 - 本轮任务按用户要求维护交接文档；未执行终端命令、shell、Gradle、编译或测试
 - UI 是否完整符合 `APP_DEVELOPMENT_SPEC.md`，尤其是竖屏布局、深色模式和交互细节
@@ -217,6 +219,7 @@
 优先级 P2：
 
 - 在用户允许后评估拆分超大的 `CalculatorScreen.kt`
+- 继续按低风险方式拆分 `CalculatorScreen.kt`：下一步可优先拆设置子页面或历史页面，但每次只迁移一组页面并保持文案/行为不变
 - 继续优化 UI 细节和体验
 - 新增功能前先更新规范并确认范围
 

@@ -23,7 +23,19 @@
 - 同步静态检查结论：`ComparisonCalculator.kt` 仍只调用 `FuturesCalculator()`，没有根据 `ComparisonItem.settlementMode` 或 `coinMarginedCalculationMode` 执行币本位计算。
 - 按用户新反馈优化币图标加载性能：避免启动时同步批量下载图标，热门币使用内置 drawable，非内置币按需后台加载缓存图标。
 - 按用户新反馈再次调整首页底部“支持作者”入口：比上一版更显眼，但仍避免红色、绿色、金色、广告化或博彩化观感。
+- 按用户新反馈执行一次低风险静态 UI 拆分：将用户反馈、关于 App、隐私政策、免责声明和打赏页面迁移到 `ui/staticpages/` 包。
 - 记录当前 Android App 代码状态、未验证事项与下一步建议。
+
+## 本轮静态页面拆分
+
+- 新增目录：`android-app/app/src/main/java/com/personal/futurescalculator/ui/staticpages/`。
+- 新增 `StaticPageComponents.kt`，包含静态页面共用布局、柔和描边按钮和说明段落组件。
+- 新增 `FeedbackScreen.kt`，保留用户反馈输入、GitHub Issue 预填、设备信息和 Toast 失败提示。
+- 新增 `AboutScreen.kt`，保留版本信息、价格更新时间、CoinGecko 数据来源和 GitHub 项目入口。
+- 新增 `PrivacyPolicyScreen.kt` 与 `DisclaimerScreen.kt`，保留原隐私和风险说明文案。
+- 新增 `DonationScreen.kt`，保留支持作者页面 UI、复制收款地址和系统返回处理。
+- `CalculatorScreen.kt` 改为导入以上静态页面函数；已移除这些页面及其专用 helper 的原内联实现。
+- `CalculatorScreen.kt` 仍保留历史记录所需的 `formatTimestamp(...)`，因为历史列表和详情仍在原文件内使用它。
 
 ## 本轮 UI 调整
 
@@ -92,6 +104,8 @@
 由于项目规则禁止我运行构建或测试，请用户本地验证：
 
 - Android Studio 同步/编译是否通过。
+- 设置页 → 用户反馈、关于 App、隐私政策、免责声明是否都能正常打开、返回，并保持原文案与交互。
+- 首页底部“支持作者”入口是否仍能打开打赏页面；复制收款地址 Toast 是否正常。
 - App 启动是否明显减少卡顿；CoinGecko 价格加载不应被前 100 币图标下载阻塞。
 - 币种选择弹窗和对比方案币种选择弹窗是否能快速打开、正常滚动，热门币内置图标是否正常显示。
 - 非内置币是否在没有缓存时显示字母占位，且在网络可用时可后台补全缓存图标。
@@ -105,6 +119,6 @@
 
 ## 当前状态
 
-- 文档维护已更新到当前静态检查结论、币种图标加载性能优化与支持作者入口 UI 调整。
+- 文档维护已更新到当前静态检查结论、币种图标加载性能优化、支持作者入口 UI 调整与静态页面拆分。
 - 未执行任何终端命令、shell、Gradle、编译或测试。
 - 等待用户本地编译/运行反馈。

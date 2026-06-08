@@ -72,7 +72,11 @@ class FuturesCalculator {
         }
         
         // 计算强平价
-        val liquidationPrice = calculateLiquidationPrice(calculatedInput)
+        val liquidationPrice = if (calculatedInput.estimateLiquidation) {
+            calculateLiquidationPrice(calculatedInput)
+        } else {
+            null
+        }
 
         // 计算到强平价距离
         val distanceToLiquidationPercent = calculateDistanceToLiquidation(calculatedInput, liquidationPrice)
@@ -96,7 +100,8 @@ class FuturesCalculator {
             stopLossPriceByRoi = stopLossPriceByRoi,
             liquidationPrice = liquidationPrice,
             distanceToLiquidationPercent = distanceToLiquidationPercent,
-            usedTotalFundsForLiquidation = calculatedInput.marginMode == MarginMode.Cross &&
+            usedTotalFundsForLiquidation = calculatedInput.estimateLiquidation &&
+                calculatedInput.marginMode == MarginMode.Cross &&
                 calculatedInput.totalFunds != null &&
                 liquidationPrice != null
         )
@@ -230,9 +235,10 @@ class FuturesCalculator {
         val maintenanceMarginRate = input.maintenanceMarginRatePercent.divide(BigDecimal(100), DIVIDE_SCALE, RoundingMode.HALF_UP)
         
         return if (input.marginMode == MarginMode.Cross) {
-            val totalFunds = input.totalFunds ?: return null
             val quantity = input.quantity ?: return null
             val positionNotional = input.entryPrice.multiply(quantity)
+            val totalFunds = input.totalFunds
+                ?: positionNotional.divide(input.leverage, DIVIDE_SCALE, RoundingMode.HALF_UP)
             val denominator = quantity.multiply(
                 if (input.side == PositionSide.Long) {
                     BigDecimal.ONE - maintenanceMarginRate

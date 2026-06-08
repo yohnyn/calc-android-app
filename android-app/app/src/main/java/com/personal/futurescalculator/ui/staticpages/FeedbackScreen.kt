@@ -31,7 +31,7 @@ fun FeedbackScreen(
                 value = feedbackText,
                 onValueChange = onFeedbackChange,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("建议或问题") },
+                label = { Text("反馈内容") },
                 minLines = 5,
                 maxLines = 9
             )

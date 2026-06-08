@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.personal.futurescalculator.data.CoinRepository
 import com.personal.futurescalculator.data.UiPreferencesRepository
 import com.personal.futurescalculator.data.HistoryRepository
+import com.personal.futurescalculator.data.PlanRepository
 import com.personal.futurescalculator.domain.AveragingCalculator
 import com.personal.futurescalculator.domain.AveragingDecisionCalculator
 import com.personal.futurescalculator.domain.ComparisonCalculator
@@ -23,10 +24,14 @@ import com.personal.futurescalculator.model.CoinMarginedCalculationMode
 import com.personal.futurescalculator.model.CoinMarginedResult
 import com.personal.futurescalculator.model.ComparisonItem
 import com.personal.futurescalculator.model.ComparisonResult
+import com.personal.futurescalculator.model.CopyFormat
 import com.personal.futurescalculator.model.SettlementMode
+import com.personal.futurescalculator.model.SavedPlan
 import com.personal.futurescalculator.model.ThemeMode
 import com.personal.futurescalculator.model.HistoryRecord
 import com.personal.futurescalculator.model.HistoryCategory
+import com.personal.futurescalculator.model.toComparisonItem
+import com.personal.futurescalculator.model.toSavedPlan
 import java.math.BigDecimal
 import java.math.RoundingMode
 import kotlinx.coroutines.Dispatchers
@@ -55,9 +60,11 @@ data class CalculatorUiState(
     val coinMarginedResult: CoinMarginedResult? = null,
     val hasSeenCoinMarginedModeDialog: Boolean = false,
     val showCoinMarginedModeDialog: Boolean = false,
-    val averagingExpanded: Boolean = true,
+    val averagingExpanded: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.System,
-    val historyRecords: List<HistoryRecord> = emptyList()
+    val copyFormat: CopyFormat = CopyFormat.Summary,
+    val historyRecords: List<HistoryRecord> = emptyList(),
+    val savedPlans: List<SavedPlan> = emptyList()
 )
 
 class CalculatorViewModel(context: Context) : ViewModel() {
@@ -72,6 +79,7 @@ class CalculatorViewModel(context: Context) : ViewModel() {
     private val coinRepository = CoinRepository(context)
     private val uiPreferencesRepository = UiPreferencesRepository(context)
     private val historyRepository = HistoryRepository(context)
+    private val planRepository = PlanRepository(context)
 
     init {
         val cached = coinRepository.loadCachedCoins()
@@ -82,10 +90,12 @@ class CalculatorViewModel(context: Context) : ViewModel() {
             priceUpdatedAt = coinRepository.loadUpdatedAt(),
             averagingExpanded = uiPreferencesRepository.loadAveragingExpanded(),
             themeMode = uiPreferencesRepository.loadThemeMode(),
+            copyFormat = uiPreferencesRepository.loadCopyFormat(),
             coinMarginedCalculationMode = uiPreferencesRepository.loadCoinMarginedCalculationMode()
                 ?: CoinMarginedCalculationMode.CoinQuantity,
             hasSeenCoinMarginedModeDialog = uiPreferencesRepository.loadHasSeenCoinMarginedModeDialog(),
-            historyRecords = historyRepository.load()
+            historyRecords = historyRepository.load(),
+            savedPlans = planRepository.load()
         )
         refreshPrices()
     }
@@ -190,9 +200,11 @@ class CalculatorViewModel(context: Context) : ViewModel() {
                 priceLoadError = state.priceLoadError,
                 averagingExpanded = state.averagingExpanded,
                 themeMode = state.themeMode,
+                copyFormat = state.copyFormat,
                 coinMarginedCalculationMode = state.coinMarginedCalculationMode,
                 hasSeenCoinMarginedModeDialog = state.hasSeenCoinMarginedModeDialog,
-                historyRecords = state.historyRecords
+                historyRecords = state.historyRecords,
+                savedPlans = state.savedPlans
             )
         }
     }
@@ -205,6 +217,11 @@ class CalculatorViewModel(context: Context) : ViewModel() {
     fun updateThemeMode(mode: ThemeMode) {
         uiPreferencesRepository.saveThemeMode(mode)
         _uiState.value = _uiState.value.copy(themeMode = mode)
+    }
+
+    fun updateCopyFormat(format: CopyFormat) {
+        uiPreferencesRepository.saveCopyFormat(format)
+        _uiState.value = _uiState.value.copy(copyFormat = format)
     }
 
     fun updateCoinMarginedCalculationMode(mode: CoinMarginedCalculationMode) {
@@ -260,6 +277,50 @@ class CalculatorViewModel(context: Context) : ViewModel() {
         }
         historyRepository.save(updated)
         _uiState.value = _uiState.value.copy(historyRecords = updated)
+    }
+
+    fun saveCurrentPlan(name: String) {
+        val state = _uiState.value
+        val plan = ComparisonItem(
+            id = "plan_${System.currentTimeMillis()}",
+            name = name.ifBlank { "开仓方案 ${state.savedPlans.size + 1}" },
+            coinId = state.selectedCoinId,
+            settlementMode = state.settlementMode,
+            coinMarginedCalculationMode = state.coinMarginedCalculationMode,
+            input = state.input,
+            lastEditedAmountField = state.lastEditedAmountField
+        ).toSavedPlan()
+        val updated = listOf(plan) + state.savedPlans
+        planRepository.save(updated)
+        _uiState.value = state.copy(savedPlans = updated)
+    }
+
+    fun deleteSavedPlan(id: String) {
+        val updated = _uiState.value.savedPlans.filterNot { it.id == id }
+        planRepository.save(updated)
+        _uiState.value = _uiState.value.copy(savedPlans = updated)
+    }
+
+    fun openSavedPlan(plan: SavedPlan) {
+        _uiState.value = _uiState.value.copy(
+            input = normalizeAmountFields(plan.input, plan.lastEditedAmountField),
+            selectedCoinId = plan.coinId,
+            settlementMode = plan.settlementMode,
+            coinMarginedCalculationMode = plan.coinMarginedCalculationMode,
+            lastEditedAmountField = plan.lastEditedAmountField
+        )
+        coinRepository.saveSelectedCoin(plan.coinId)
+        calculateResult()
+        calculateComparisonResults()
+        calculateAveragingResult()
+        calculateCoinMarginedResult()
+    }
+
+    fun addSavedPlanToComparison(plan: SavedPlan) {
+        val item = plan.toComparisonItem().copy(id = "item_${System.currentTimeMillis()}")
+        val updated = _uiState.value.comparisonItems + item
+        _uiState.value = _uiState.value.copy(comparisonItems = updated)
+        calculateComparisonResults()
     }
 
     fun updateSettlementMode(mode: SettlementMode) {
@@ -347,10 +408,18 @@ class CalculatorViewModel(context: Context) : ViewModel() {
     private fun calculateComparisonResults() {
         val currentInput = _uiState.value.input
         val currentResult = _uiState.value.result
+        val currentCoinMarginedResult = calculateCoinMarginedResultFor(
+            input = currentInput,
+            calculationMode = _uiState.value.coinMarginedCalculationMode,
+            coinId = _uiState.value.selectedCoinId
+        )
         val comparisonItems = _uiState.value.comparisonItems
         val comparisonResults = comparisonCalculator.compare(
             current = currentResult,
+            currentCoinMargined = currentCoinMarginedResult,
+            currentSettlementMode = _uiState.value.settlementMode,
             items = comparisonItems,
+            coinPricesById = _uiState.value.coins.associate { it.id to it.priceUsdt },
             totalFundsForCrossLiquidation = currentInput.totalFunds
         )
         _uiState.value = _uiState.value.copy(comparisonResults = comparisonResults)
@@ -395,16 +464,28 @@ class CalculatorViewModel(context: Context) : ViewModel() {
 
     private fun calculateCoinMarginedResult() {
         val state = _uiState.value
-        val selectedCoin = state.coins.firstOrNull { it.id == state.selectedCoinId }
         _uiState.value = state.copy(
-            coinMarginedResult = coinMarginedCalculator.calculate(
+            coinMarginedResult = calculateCoinMarginedResultFor(
+                input = state.input,
                 calculationMode = state.coinMarginedCalculationMode,
-                side = state.input.side,
-                quantity = state.input.quantity,
-                entryPrice = state.input.entryPrice,
-                exitPrice = state.input.exitPrice,
-                currentPrice = selectedCoin?.priceUsdt
+                coinId = state.selectedCoinId
             )
+        )
+    }
+
+    private fun calculateCoinMarginedResultFor(
+        input: CalculationInput,
+        calculationMode: CoinMarginedCalculationMode,
+        coinId: String
+    ): CoinMarginedResult? {
+        val coin = _uiState.value.coins.firstOrNull { it.id == coinId }
+        return coinMarginedCalculator.calculate(
+            calculationMode = calculationMode,
+            side = input.side,
+            quantity = input.quantity,
+            entryPrice = input.entryPrice,
+            exitPrice = input.exitPrice,
+            currentPrice = coin?.priceUsdt
         )
     }
 

@@ -9,9 +9,11 @@ import com.personal.futurescalculator.model.AmountField
 import com.personal.futurescalculator.model.AveragingInput
 import com.personal.futurescalculator.model.AveragingDecisionInput
 import com.personal.futurescalculator.model.CalculationInput
+import com.personal.futurescalculator.model.CoinMarginedCalculationMode
 import com.personal.futurescalculator.model.ComparisonItem
 import com.personal.futurescalculator.model.MarginMode
 import com.personal.futurescalculator.model.PositionSide
+import com.personal.futurescalculator.model.SettlementMode
 import com.personal.futurescalculator.viewmodel.normalizeAmountFields
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -32,11 +34,12 @@ class FuturesCalculatorTest {
     @Test
     fun coinMarginedLongReturnsCoinProfitAndUsdtValue() {
         val result = coinMarginedCalculator.calculate(
+            calculationMode = CoinMarginedCalculationMode.CoinQuantity,
             side = PositionSide.Long,
             quantity = BigDecimal("0.1"),
             entryPrice = BigDecimal("80000"),
             exitPrice = BigDecimal("84000"),
-            currentPrice = BigDecimal("80000")
+            currentPrice = BigDecimal("84000")
         )
 
         assertNotNull(result)
@@ -47,16 +50,33 @@ class FuturesCalculatorTest {
     @Test
     fun coinMarginedShortReturnsCoinProfitAndUsdtValue() {
         val result = coinMarginedCalculator.calculate(
+            calculationMode = CoinMarginedCalculationMode.CoinQuantity,
             side = PositionSide.Short,
             quantity = BigDecimal("0.1"),
             entryPrice = BigDecimal("80000"),
             exitPrice = BigDecimal("76000"),
-            currentPrice = BigDecimal("80000")
+            currentPrice = BigDecimal("76000")
         )
 
         assertNotNull(result)
         assertScaledEquals("0.0052631578944", result!!.pnlCoin)
         assertScaledEquals("421.052631552", result.estimatedValueUsdt)
+    }
+
+    @Test
+    fun inverseContractDoesNotUseLinearUsdtMarginedFormula() {
+        val result = coinMarginedCalculator.calculate(
+            calculationMode = CoinMarginedCalculationMode.InverseContract,
+            side = PositionSide.Long,
+            quantity = BigDecimal("1"),
+            entryPrice = BigDecimal("100000"),
+            exitPrice = BigDecimal("110000"),
+            currentPrice = BigDecimal("110000")
+        )
+
+        assertNotNull(result)
+        assertScaledEquals("0.09090909090909", result!!.pnlCoin)
+        assertScaledEquals("10000", result.estimatedValueUsdt)
     }
 
     @Test
@@ -242,6 +262,44 @@ class FuturesCalculatorTest {
     }
 
     @Test
+    fun comparisonSupportsCoinMarginedSchemesByEstimatedUsdtValue() {
+        val current = calculator.calculate(
+            CalculationInput(
+                quantity = BigDecimal("1"),
+                entryPrice = BigDecimal("100000"),
+                exitPrice = BigDecimal("110000"),
+                leverage = BigDecimal("3"),
+                openFeeRatePercent = BigDecimal.ZERO,
+                closeFeeRatePercent = BigDecimal.ZERO
+            )
+        )
+        val comparison = ComparisonCalculator().compare(
+            current = current,
+            items = listOf(
+                ComparisonItem(
+                    id = "coin",
+                    name = "币本位方案",
+                    coinId = "bitcoin",
+                    settlementMode = SettlementMode.CoinMargined,
+                    coinMarginedCalculationMode = CoinMarginedCalculationMode.CoinQuantity,
+                    input = CalculationInput(
+                        quantity = BigDecimal("1"),
+                        entryPrice = BigDecimal("100000"),
+                        exitPrice = BigDecimal("110000")
+                    )
+                )
+            ),
+            coinPricesById = mapOf("bitcoin" to BigDecimal("100000"))
+        ).single()
+
+        assertNull(comparison.result)
+        assertNotNull(comparison.coinMarginedResult)
+        assertScaledEquals("0.1", comparison.coinMarginedResult!!.pnlCoin)
+        assertScaledEquals("10000", comparison.coinMarginedResult.estimatedValueUsdt)
+        assertScaledEquals("0", comparison.netPnlDiff)
+    }
+
+    @Test
     fun isolatedLongProfitUsesPositionInitialMarginAndBothFees() {
         val result = calculateIsolatedCase(PositionSide.Long, "84000")
 
@@ -376,7 +434,7 @@ class FuturesCalculatorTest {
     }
 
     @Test
-    fun crossModeDoesNotPretendToKnowLiquidationPrice() {
+    fun crossModeFallsBackToInitialMarginForLiquidationPrice() {
         val result = calculator.calculate(
             CalculationInput(
                 marginMode = MarginMode.Cross,
@@ -387,8 +445,25 @@ class FuturesCalculatorTest {
         )
 
         assertNotNull(result)
-        assertNull(result!!.liquidationPrice)
-        assertNull(result.distanceToLiquidationPercent)
+        assertScaledEquals("72361.80904523", result!!.liquidationPrice)
+        assertScaledEquals("9.54773869", result.distanceToLiquidationPercent)
+    }
+
+    @Test
+    fun crossModeUsesTotalFundsToMoveLiquidationPriceFartherAway() {
+        val baseInput = CalculationInput(
+            marginMode = MarginMode.Cross,
+            quantity = BigDecimal("0.1"),
+            entryPrice = BigDecimal("80000"),
+            leverage = BigDecimal("10")
+        )
+        val initialMarginResult = calculator.calculate(baseInput)
+        val totalFundsResult = calculator.calculate(baseInput.copy(totalFunds = BigDecimal("2000")))
+
+        assertNotNull(initialMarginResult)
+        assertNotNull(totalFundsResult)
+        assertScaledEquals("72361.80904523", initialMarginResult!!.liquidationPrice)
+        assertScaledEquals("60301.50753769", totalFundsResult!!.liquidationPrice)
     }
 
     @Test

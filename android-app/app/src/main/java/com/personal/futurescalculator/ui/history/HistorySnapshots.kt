@@ -41,14 +41,16 @@ fun createProfitHistorySnapshot(
             HistoryField("维持保证金率", "${input.maintenanceMarginRatePercent.stripTrailingZeros().toPlainString()}%"),
             HistoryField("总资金", input.totalFunds?.let { "${DecimalFormatters.formatCurrency(it)} USDT" } ?: "未填写")
         )),
-        HistorySection("保存时结果", listOf(
-            HistoryField("仓位价值", "${DecimalFormatters.formatCurrency(result.positionValue)} USDT"),
-            HistoryField("总手续费约", "${DecimalFormatters.formatCurrency(result.totalFee)} USDT"),
-            HistoryField("净盈亏", "${DecimalFormatters.formatPositiveNegative(result.netPnl)} USDT"),
-            HistoryField("ROI", DecimalFormatters.formatPercentage(result.roiPercent)),
-            HistoryField("估算强平价", result.liquidationPrice?.let { "${DecimalFormatters.formatCurrency(it)} USDT" } ?: "无法可靠估算"),
-            HistoryField("距离强平", DecimalFormatters.formatPercentage(result.distanceToLiquidationPercent))
-        ))
+        HistorySection("保存时结果", buildList {
+            add(HistoryField("仓位价值", "${DecimalFormatters.formatCurrency(result.positionValue)} USDT"))
+            add(HistoryField("总手续费约", "${DecimalFormatters.formatCurrency(result.totalFee)} USDT"))
+            add(HistoryField("净盈亏", "${DecimalFormatters.formatPositiveNegative(result.netPnl)} USDT"))
+            add(HistoryField("ROI", DecimalFormatters.formatPercentage(result.roiPercent)))
+            if (input.estimateLiquidation && result.liquidationPrice != null) {
+                add(HistoryField("估算强平价", "${DecimalFormatters.formatCurrency(result.liquidationPrice)} USDT"))
+                add(HistoryField("距离强平", DecimalFormatters.formatPercentage(result.distanceToLiquidationPercent)))
+            }
+        })
     )
 )
 
@@ -80,8 +82,7 @@ fun createAveragingHistorySnapshot(
             HistoryField("补仓后总仓位", "${DecimalFormatters.formatQuantity(result.newQuantity)} $symbol"),
             HistoryField("补仓前收益", "${DecimalFormatters.formatPositiveNegative(result.pnlWithoutAdding)} USDT"),
             HistoryField("补仓后收益", "${DecimalFormatters.formatPositiveNegative(result.pnlAfterAdding)} USDT"),
-            HistoryField("收益变化", "${DecimalFormatters.formatPositiveNegative(result.pnlChange)} USDT"),
-            HistoryField("风险变化", "未纳入本次模拟")
+            HistoryField("收益变化", "${DecimalFormatters.formatPositiveNegative(result.pnlChange)} USDT")
         ))
     )
 )

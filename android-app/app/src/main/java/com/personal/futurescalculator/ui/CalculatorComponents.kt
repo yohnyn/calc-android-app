@@ -161,15 +161,12 @@ fun LeverageSelector(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val primaryOptions = listOf("1x", "3x", "5x", "10x", "20x")
-    val moreOptions = listOf("50x", "100x", "125x")
-    val leverageOptions = primaryOptions + moreOptions
+    val leverageOptions = listOf("1x", "3x", "5x", "10x", "20x", "50x")
     val selectedLeverage = leverage.stripTrailingZeros().toPlainString() + "x"
     val selectedIsPreset = selectedLeverage in leverageOptions
     var customTapCount by remember { mutableStateOf(0) }
     var customEditing by remember { mutableStateOf(false) }
     var customText by remember { mutableStateOf(leverage.stripTrailingZeros().toPlainString()) }
-    var moreExpanded by remember { mutableStateOf(selectedLeverage in moreOptions || !selectedIsPreset) }
 
     LaunchedEffect(leverage) {
         if (!customEditing) {
@@ -179,18 +176,20 @@ fun LeverageSelector(
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Text(
-            text = "杠杆",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            primaryOptions.forEach { option ->
+            Text(
+                text = "杠杆",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            leverageOptions.forEach { option ->
                 LeverageButton(
                     text = option,
                     selected = option == selectedLeverage,
@@ -202,66 +201,39 @@ fun LeverageSelector(
                     modifier = Modifier.weight(1f)
                 )
             }
-        }
-        if (!moreExpanded) {
-            LeverageButton(
-                text = "更多 ▼",
-                selected = false,
+            CustomLeverageInput(
+                text = customText,
+                editing = customEditing,
+                selected = !selectedIsPreset,
                 selectedColor = selectedColor,
-                onClick = { moreExpanded = true },
-                modifier = Modifier.fillMaxWidth()
-            )
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                moreOptions.forEach { option ->
-                    LeverageButton(
-                        text = option,
-                        selected = option == selectedLeverage,
-                        selectedColor = selectedColor,
-                        onClick = {
-                            customEditing = false
-                            onLeverageChange(BigDecimal(option.removeSuffix("x")))
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                CustomLeverageInput(
-                    text = customText,
-                    editing = customEditing,
-                    selected = !selectedIsPreset,
-                    selectedColor = selectedColor,
-                    modifier = Modifier.weight(1f),
-                    onTapWhenLocked = {
-                        customTapCount += 1
-                        if (customTapCount >= 2) {
-                            customEditing = true
-                            customTapCount = 0
+                modifier = Modifier.weight(1.15f),
+                onTapWhenLocked = {
+                    customTapCount += 1
+                    if (customTapCount >= 2) {
+                        customEditing = true
+                        customTapCount = 0
+                    }
+                },
+                onTextChange = { nextText ->
+                    val normalized = nextText.trim()
+                    customText = normalized
+                    val parsed = runCatching { BigDecimal(normalized) }.getOrNull()
+                    when {
+                        parsed != null && parsed > BigDecimal("125") -> {
+                            customText = ""
+                            onLeverageChange(BigDecimal.ONE)
+                            Toast.makeText(
+                                context,
+                                "杠杆不能超过 125x，已恢复为 1x",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
-                    },
-                    onTextChange = { nextText ->
-                        val normalized = nextText.trim()
-                        customText = normalized
-                        val parsed = runCatching { BigDecimal(normalized) }.getOrNull()
-                        when {
-                            parsed != null && parsed > BigDecimal("125") -> {
-                                customText = ""
-                                onLeverageChange(BigDecimal.ONE)
-                                Toast.makeText(
-                                    context,
-                                    "杠杆不能超过 125x，已恢复为 1x",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                            parsed != null && parsed >= BigDecimal.ONE -> {
-                                onLeverageChange(parsed)
-                            }
+                        parsed != null && parsed >= BigDecimal.ONE -> {
+                            onLeverageChange(parsed)
                         }
                     }
-                )
-            }
+                }
+            )
         }
     }
 }
@@ -345,7 +317,7 @@ private fun CustomLeverageInput(
                 )
             } else {
                 Text(
-                    text = if (selected) "${text}x" else "其他",
+                    text = if (selected) "${text}x" else "自定义",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Medium,
                     color = contentColor

@@ -4,8 +4,8 @@ enum class HistoryCategory(val label: String) {
     ProfitCalculation("收益测算"),
     SchemeComparison("方案对比"),
     AveragingSimulation("补仓模拟"),
-    TargetProfitReverse("目标收益反推"),
-    StopLossReverse("止损反推")
+    TargetProfitReverse("目标收益"),
+    StopLossReverse("止损")
 }
 
 data class HistoryField(

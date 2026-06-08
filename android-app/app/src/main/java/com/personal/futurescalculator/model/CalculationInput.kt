@@ -5,7 +5,7 @@ import java.math.BigDecimal
 data class CalculationInput(
     val side: PositionSide = PositionSide.Long,
     val marginMode: MarginMode = MarginMode.Cross,
-    val leverage: BigDecimal = BigDecimal("3"),
+    val leverage: BigDecimal = BigDecimal.ONE,
     val margin: BigDecimal? = null,
     val entryPrice: BigDecimal? = null,
     val exitPrice: BigDecimal? = null,
@@ -19,5 +19,6 @@ data class CalculationInput(
     val maxLossAmount: BigDecimal? = null,
     val maxLossRoiPercent: BigDecimal? = null,
     val maintenanceMarginRatePercent: BigDecimal = BigDecimal("0.5"),
-    val totalFunds: BigDecimal? = null
+    val totalFunds: BigDecimal? = null,
+    val estimateLiquidation: Boolean = false
 )

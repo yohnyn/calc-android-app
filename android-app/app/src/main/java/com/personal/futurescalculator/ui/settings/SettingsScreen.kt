@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.personal.futurescalculator.model.CoinMarginedCalculationMode
+import com.personal.futurescalculator.model.CopyFormat
 import com.personal.futurescalculator.model.ThemeMode
 import com.personal.futurescalculator.ui.SectionPanel
 import com.personal.futurescalculator.ui.staticpages.AboutScreen
@@ -52,6 +53,8 @@ fun SettingsScreen(
     onThemeModeChange: (ThemeMode) -> Unit,
     coinMarginedCalculationMode: CoinMarginedCalculationMode,
     onCoinMarginedCalculationModeChange: (CoinMarginedCalculationMode) -> Unit,
+    copyFormat: CopyFormat,
+    onCopyFormatChange: (CopyFormat) -> Unit,
     feedbackText: String,
     onFeedbackChange: (String) -> Unit,
     priceUpdatedAt: Long?,
@@ -88,6 +91,11 @@ fun SettingsScreen(
             onModeChange = onCoinMarginedCalculationModeChange,
             onBack = { page = SettingsPage.Main }
         )
+        SettingsPage.CopyFormat -> CopyFormatSettingsScreen(
+            format = copyFormat,
+            onFormatChange = onCopyFormatChange,
+            onBack = { page = SettingsPage.Main }
+        )
         SettingsPage.PnlColor -> PnlColorScreen(
             pnlDisplayMode = pnlDisplayMode,
             onPnlDisplayModeChange = onPnlDisplayModeChange,
@@ -109,6 +117,7 @@ private enum class SettingsPage {
     AppTheme,
     CoinMarginedMode,
     PnlColor,
+    CopyFormat,
 }
 
 @Composable
@@ -133,19 +142,22 @@ private fun SettingsHome(
                 fontWeight = FontWeight.Bold
             )
             SectionPanel(title = "外观") {
-                SettingsMenuButton("App 主题", "选择界面明暗模式") { onOpenPage(SettingsPage.AppTheme) }
-                SettingsMenuButton("盈利亏损配色", "设置盈亏结果颜色与图标显示") { onOpenPage(SettingsPage.PnlColor) }
+                SettingsMenuButton("App主题") { onOpenPage(SettingsPage.AppTheme) }
+                SettingsMenuButton("盈亏配色") { onOpenPage(SettingsPage.PnlColor) }
             }
             SectionPanel(title = "币本位") {
-                SettingsMenuButton("币本位默认模式", "选择币数量模式或反向合约模式") { onOpenPage(SettingsPage.CoinMarginedMode) }
+                SettingsMenuButton("币本位默认模式") { onOpenPage(SettingsPage.CoinMarginedMode) }
+            }
+            SectionPanel(title = "复制与分享") {
+                SettingsMenuButton("复制默认格式") { onOpenPage(SettingsPage.CopyFormat) }
             }
             SectionPanel(title = "反馈") {
-                SettingsMenuButton("用户反馈", "提交建议并创建 GitHub Issue") { onOpenPage(SettingsPage.Feedback) }
+                SettingsMenuButton("用户反馈") { onOpenPage(SettingsPage.Feedback) }
             }
             SectionPanel(title = "关于") {
-                SettingsMenuButton("关于 App", "版本信息、数据来源与项目地址") { onOpenPage(SettingsPage.About) }
-                SettingsMenuButton("隐私政策", "查看设备信息与数据使用说明") { onOpenPage(SettingsPage.Privacy) }
-                SettingsMenuButton("免责声明", "查看客观估算与责任边界") { onOpenPage(SettingsPage.Disclaimer) }
+                SettingsMenuButton("关于App") { onOpenPage(SettingsPage.About) }
+                SettingsMenuButton("隐私政策") { onOpenPage(SettingsPage.Privacy) }
+                SettingsMenuButton("免责声明") { onOpenPage(SettingsPage.Disclaimer) }
             }
             SettingsSoftOutlinedButton(
                 onClick = onBack,
@@ -164,7 +176,7 @@ private fun AppThemeScreen(
     onThemeModeChange: (ThemeMode) -> Unit,
     onBack: () -> Unit
 ) {
-    SettingsPageLayout(title = "App 主题", onBack = onBack) {
+    SettingsPageLayout(title = "App主题", onBack = onBack) {
         SectionPanel(title = "明暗模式") {
             Text(
                 text = "选择界面明暗模式，设置会保存在本地。",
@@ -189,7 +201,7 @@ private fun PnlColorScreen(
     onPnlDisplayModeChange: (PnlDisplayMode) -> Unit,
     onBack: () -> Unit
 ) {
-    SettingsPageLayout(title = "盈利亏损配色", onBack = onBack) {
+    SettingsPageLayout(title = "盈亏配色", onBack = onBack) {
         SectionPanel(title = "结果配色") {
             Text(
                 text = "配色仅应用于盈亏结果，交易方向统一使用主题色。",
@@ -223,6 +235,25 @@ private fun PnlColorScreen(
                     lossIndicator = "▼ ",
                     onClick = { onPnlDisplayModeChange(PnlDisplayMode.IconsOnly) }
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CopyFormatSettingsScreen(
+    format: CopyFormat,
+    onFormatChange: (CopyFormat) -> Unit,
+    onBack: () -> Unit
+) {
+    SettingsPageLayout(title = "复制默认格式", onBack = onBack) {
+        SectionPanel(title = "默认格式") {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CopyFormatButton("摘要版", CopyFormat.Summary, format, onFormatChange, Modifier.weight(1f))
+                CopyFormatButton("详细版", CopyFormat.Detail, format, onFormatChange, Modifier.weight(1f))
             }
         }
     }
@@ -343,6 +374,28 @@ private fun CoinMarginedModeOption(
 }
 
 @Composable
+private fun CopyFormatButton(
+    text: String,
+    format: CopyFormat,
+    selectedFormat: CopyFormat,
+    onSelect: (CopyFormat) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Button(
+        onClick = { onSelect(format) },
+        modifier = modifier.height(40.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (format == selectedFormat) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = if (format == selectedFormat) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+        ),
+        shape = MaterialTheme.shapes.small
+    ) {
+        Text(text, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+@Composable
 private fun ThemeModeButton(
     text: String,
     mode: ThemeMode,
@@ -365,15 +418,14 @@ private fun ThemeModeButton(
 }
 
 @Composable
-private fun SettingsMenuButton(title: String, supporting: String, onClick: () -> Unit) {
+private fun SettingsMenuButton(title: String, onClick: () -> Unit) {
     SettingsSoftOutlinedButton(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.small
     ) {
-        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(text = supporting, style = MaterialTheme.typography.labelMedium)
         }
     }
 }

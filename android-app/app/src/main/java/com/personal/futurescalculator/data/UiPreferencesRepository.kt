@@ -2,12 +2,13 @@ package com.personal.futurescalculator.data
 
 import android.content.Context
 import com.personal.futurescalculator.model.CoinMarginedCalculationMode
+import com.personal.futurescalculator.model.CopyFormat
 import com.personal.futurescalculator.model.ThemeMode
 
 class UiPreferencesRepository(context: Context) {
     private val preferences = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
 
-    fun loadAveragingExpanded(): Boolean = preferences.getBoolean(KEY_AVERAGING_EXPANDED, true)
+    fun loadAveragingExpanded(): Boolean = false
 
     fun saveAveragingExpanded(expanded: Boolean) {
         preferences.edit().putBoolean(KEY_AVERAGING_EXPANDED, expanded).apply()
@@ -48,11 +49,21 @@ class UiPreferencesRepository(context: Context) {
         saveCoinMarginedCalculationModeRemembered(hasSeen)
     }
 
+    fun loadCopyFormat(): CopyFormat {
+        val saved = preferences.getString(KEY_COPY_FORMAT, CopyFormat.Summary.name)
+        return CopyFormat.entries.firstOrNull { it.name == saved } ?: CopyFormat.Summary
+    }
+
+    fun saveCopyFormat(format: CopyFormat) {
+        preferences.edit().putString(KEY_COPY_FORMAT, format.name).apply()
+    }
+
     private companion object {
         const val PREFERENCES = "ui_preferences"
         const val KEY_AVERAGING_EXPANDED = "averaging_expanded"
         const val KEY_THEME_MODE = "theme_mode"
         const val KEY_COIN_MARGINED_CALCULATION_MODE = "coin_margined_calculation_mode"
         const val KEY_COIN_MARGINED_CALCULATION_MODE_REMEMBERED = "coin_margined_calculation_mode_remembered"
+        const val KEY_COPY_FORMAT = "copy_format"
     }
 }

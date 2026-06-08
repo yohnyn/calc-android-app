@@ -33,7 +33,6 @@ import com.personal.futurescalculator.model.PositionSide
 import com.personal.futurescalculator.model.SettlementMode
 import com.personal.futurescalculator.ui.SectionPanel
 import com.personal.futurescalculator.ui.theme.LocalProfitLossPalette
-import com.personal.futurescalculator.ui.theme.LossRed
 import com.personal.futurescalculator.ui.theme.WarningAmber
 import com.personal.futurescalculator.util.DecimalFormatters
 import java.math.BigDecimal
@@ -58,6 +57,7 @@ fun MainResultDialog(
             ) {
                 Text("计算结果", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 ResultCard(
+                    input = input,
                     result = result,
                     symbol = symbol
                 )
@@ -187,6 +187,8 @@ private fun CalculationInputDetails(
             )
         }
         if (
+            input.takeProfitPrice != null ||
+            input.stopLossPrice != null ||
             input.targetProfitAmount != null ||
             input.targetRoiPercent != null ||
             input.maxLossAmount != null ||
@@ -194,15 +196,17 @@ private fun CalculationInputDetails(
         ) {
             ResultInputRow {
                 MetricTile(
-                    label = "目标收益",
-                    value = input.targetProfitAmount?.let { "${DecimalFormatters.formatCurrency(it)} USDT" }
+                    label = if (input.takeProfitPrice != null) "止盈价" else "目标收益",
+                    value = input.takeProfitPrice?.let { "${DecimalFormatters.formatCurrency(it)} USDT" }
+                        ?: input.targetProfitAmount?.let { "${DecimalFormatters.formatCurrency(it)} USDT" }
                         ?: input.targetRoiPercent?.let { "${DecimalFormatters.formatPercentage(it)} ROI" }
                         ?: "未填写",
                     modifier = Modifier.weight(1f)
                 )
                 MetricTile(
-                    label = "目标亏损",
-                    value = input.maxLossAmount?.let { "${DecimalFormatters.formatCurrency(it)} USDT" }
+                    label = if (input.stopLossPrice != null) "止损价" else "目标亏损",
+                    value = input.stopLossPrice?.let { "${DecimalFormatters.formatCurrency(it)} USDT" }
+                        ?: input.maxLossAmount?.let { "${DecimalFormatters.formatCurrency(it)} USDT" }
                         ?: input.maxLossRoiPercent?.let { "${DecimalFormatters.formatPercentage(it)} ROI" }
                         ?: "未填写",
                     modifier = Modifier.weight(1f)
@@ -247,12 +251,15 @@ fun CompactExpandableResultCard(
 
 @Composable
 fun ResultCard(
+    input: CalculationInput? = null,
     result: CalculationResult,
     symbol: String = "币"
 ) {
     val palette = LocalProfitLossPalette.current
     val netPnl = result.netPnl
-    val hasTargetOrStop = result.targetProfitPriceByAmount != null ||
+    val hasTargetOrStop = input?.takeProfitPrice != null ||
+        input?.stopLossPrice != null ||
+        result.targetProfitPriceByAmount != null ||
         result.targetProfitPriceByRoi != null ||
         result.stopLossPriceByAmount != null ||
         result.stopLossPriceByRoi != null
@@ -293,7 +300,7 @@ fun ResultCard(
                         color = resultAccent
                     )
                     Text(
-                        text = resultSourceLabel(result),
+                        text = resultSourceLabel(input, result),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -316,7 +323,6 @@ fun ResultCard(
                 fontWeight = FontWeight.Bold
             )
             if (result.liquidationPrice != null) {
-                RiskLevelCard(distancePercent = result.distanceToLiquidationPercent)
                 MetricTile(
                     label = "估算强平价",
                     value = "${DecimalFormatters.formatCurrency(result.liquidationPrice)} USDT",
@@ -329,7 +335,7 @@ fun ResultCard(
                 )
             } else {
                 MetricTile(
-                    label = "全仓强平价与风险",
+                    label = "估算强平价",
                     value = "无法可靠估算"
                 )
             }
@@ -361,66 +367,29 @@ fun ResultCard(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     MetricTile(
-                        label = "目标收益价",
-                        value = targetPriceText(result.targetProfitPriceByAmount, result.targetProfitPriceByRoi),
-                        supporting = targetPriceSupporting(result.targetProfitPriceByAmount, result.targetProfitPriceByRoi),
+                        label = "止盈价",
+                        value = targetPriceText(input?.takeProfitPrice, result.targetProfitPriceByAmount, result.targetProfitPriceByRoi),
+                        supporting = result.takeProfitNetPnl?.let { "止盈收益 ${DecimalFormatters.formatPositiveNegative(it)} USDT" }
+                            ?: targetPriceSupporting(result.targetProfitPriceByAmount, result.targetProfitPriceByRoi),
                         valueColor = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.weight(1f)
                     )
                     MetricTile(
                         label = "止损价",
-                        value = targetPriceText(result.stopLossPriceByAmount, result.stopLossPriceByRoi),
-                        supporting = targetPriceSupporting(result.stopLossPriceByAmount, result.stopLossPriceByRoi),
+                        value = targetPriceText(input?.stopLossPrice, result.stopLossPriceByAmount, result.stopLossPriceByRoi),
+                        supporting = result.stopLossNetPnl?.let { "止损亏损 ${DecimalFormatters.formatPositiveNegative(it)} USDT" }
+                            ?: targetPriceSupporting(result.stopLossPriceByAmount, result.stopLossPriceByRoi),
                         valueColor = MaterialTheme.colorScheme.secondary,
                         modifier = Modifier.weight(1f)
                     )
                 }
+                result.rewardRiskRatio?.let {
+                    MetricTile(
+                        label = "盈亏比",
+                        value = "1:${DecimalFormatters.formatQuantity(it)}"
+                    )
+                }
             }
-        }
-    }
-}
-
-@Composable
-private fun RiskLevelCard(distancePercent: BigDecimal?) {
-    val level = when {
-        distancePercent == null -> Triple("初始风险未知", MaterialTheme.colorScheme.onSurfaceVariant, "缺少可计算数据")
-        distancePercent > BigDecimal("30") -> Triple("初始风险：低风险", MaterialTheme.colorScheme.tertiary, "开仓价距估算强平价超过 30%")
-        distancePercent >= BigDecimal("10") -> Triple("初始风险：中风险", WarningAmber, "开仓价距估算强平价在 10% 至 30%")
-        else -> Triple("初始风险：高风险", LossRed, "开仓价距估算强平价不足 10%")
-    }
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.small,
-        color = level.second.copy(alpha = 0.14f),
-        border = BorderStroke(1.dp, level.second.copy(alpha = 0.30f))
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    text = level.first,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = level.second
-                )
-                Text(
-                    text = level.third,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Text(
-                text = "${DecimalFormatters.formatPercentage(distancePercent)}",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = level.second
-            )
         }
     }
 }
@@ -442,11 +411,17 @@ private fun ResultMiniMetric(label: String, value: String, color: Color) {
     }
 }
 
-private fun resultSourceLabel(result: CalculationResult): String {
-    val hasTarget = result.targetProfitPriceByAmount != null || result.targetProfitPriceByRoi != null
-    val hasStop = result.stopLossPriceByAmount != null || result.stopLossPriceByRoi != null
+private fun resultSourceLabel(input: CalculationInput?, result: CalculationResult): String {
+    val hasTarget = input?.takeProfitPrice != null ||
+        result.targetProfitPriceByAmount != null ||
+        result.targetProfitPriceByRoi != null
+    val hasStop = input?.stopLossPrice != null ||
+        result.stopLossPriceByAmount != null ||
+        result.stopLossPriceByRoi != null
     return when {
-        hasTarget && hasStop -> "已反推止盈与止损，未选择单一结果"
+        hasTarget && hasStop -> "已计算止盈与止损"
+        input?.takeProfitPrice != null -> "按止盈价计算"
+        input?.stopLossPrice != null -> "按止损价计算"
         result.targetProfitPriceByAmount != null -> "按目标收益反推价计算"
         result.targetProfitPriceByRoi != null -> "按目标收益 ROI 反推价计算"
         result.stopLossPriceByAmount != null -> "按目标亏损反推价计算"
@@ -553,8 +528,8 @@ private fun PositionSide.label(): String = if (this == PositionSide.Long) "做�
 
 private fun MarginMode.label(): String = if (this == MarginMode.Cross) "全仓" else "逐仓"
 
-private fun targetPriceText(amountPrice: BigDecimal?, roiPrice: BigDecimal?): String {
-    val price = amountPrice ?: roiPrice
+private fun targetPriceText(directPrice: BigDecimal?, amountPrice: BigDecimal?, roiPrice: BigDecimal?): String {
+    val price = directPrice ?: amountPrice ?: roiPrice
     return "${DecimalFormatters.formatCurrency(price)} USDT"
 }
 

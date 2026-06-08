@@ -27,11 +27,11 @@ class FuturesCalculator {
         val targetProfitPriceByRoi = calculateTargetProfitPriceByRoi(calculatedInput, requiredMargin)
         val stopLossPriceByAmount = calculateStopLossPriceByAmount(calculatedInput)
         val stopLossPriceByRoi = calculateStopLossPriceByRoi(calculatedInput, requiredMargin)
+        val takeProfitPrice = calculatedInput.takeProfitPrice ?: targetProfitPriceByAmount ?: targetProfitPriceByRoi
+        val stopLossPrice = calculatedInput.stopLossPrice ?: stopLossPriceByAmount ?: stopLossPriceByRoi
         val reversePrices = listOfNotNull(
-            targetProfitPriceByAmount,
-            targetProfitPriceByRoi,
-            stopLossPriceByAmount,
-            stopLossPriceByRoi
+            takeProfitPrice,
+            stopLossPrice
         )
         val effectiveExitPrice = calculatedInput.exitPrice
             ?: reversePrices.singleOrNull()
@@ -58,6 +58,18 @@ class FuturesCalculator {
         } else {
             null
         }
+        val takeProfitNetPnl = takeProfitPrice?.let { calculateNetPnlAtExit(calculatedInput, it, openFee) }
+        val stopLossNetPnl = stopLossPrice?.let { calculateNetPnlAtExit(calculatedInput, it, openFee) }
+        val rewardRiskRatio = if (
+            takeProfitNetPnl != null &&
+            stopLossNetPnl != null &&
+            takeProfitNetPnl > BigDecimal.ZERO &&
+            stopLossNetPnl < BigDecimal.ZERO
+        ) {
+            takeProfitNetPnl.divide(stopLossNetPnl.abs(), DIVIDE_SCALE, RoundingMode.HALF_UP)
+        } else {
+            null
+        }
         
         // 计算强平价
         val liquidationPrice = calculateLiquidationPrice(calculatedInput)
@@ -75,6 +87,9 @@ class FuturesCalculator {
             totalFee = totalFee,
             netPnl = netPnl,
             roiPercent = roiPercent,
+            takeProfitNetPnl = takeProfitNetPnl,
+            stopLossNetPnl = stopLossNetPnl,
+            rewardRiskRatio = rewardRiskRatio,
             targetProfitPriceByAmount = targetProfitPriceByAmount,
             targetProfitPriceByRoi = targetProfitPriceByRoi,
             stopLossPriceByAmount = stopLossPriceByAmount,
@@ -100,6 +115,14 @@ class FuturesCalculator {
         
         // 平仓价如果存在必须大于0
         if (input.exitPrice != null && input.exitPrice <= BigDecimal.ZERO) {
+            return false
+        }
+
+        if (input.takeProfitPrice != null && input.takeProfitPrice <= BigDecimal.ZERO) {
+            return false
+        }
+
+        if (input.stopLossPrice != null && input.stopLossPrice <= BigDecimal.ZERO) {
             return false
         }
         
@@ -276,6 +299,22 @@ class FuturesCalculator {
         
         val feeRate = input.closeFeeRatePercent.divide(BigDecimal(100), DIVIDE_SCALE, RoundingMode.HALF_UP)
         return input.exitPrice!! * input.quantity!! * feeRate
+    }
+
+    private fun calculateNetPnlAtExit(
+        input: CalculationInput,
+        exitPrice: BigDecimal,
+        openFee: BigDecimal
+    ): BigDecimal? {
+        val quantity = input.quantity ?: return null
+        val grossPnl = if (input.side == PositionSide.Long) {
+            (exitPrice - input.entryPrice!!) * quantity
+        } else {
+            (input.entryPrice!! - exitPrice) * quantity
+        }
+        val closeFeeRate = input.closeFeeRatePercent.divide(BigDecimal(100), DIVIDE_SCALE, RoundingMode.HALF_UP)
+        val closeFee = exitPrice * quantity * closeFeeRate
+        return grossPnl - openFee - closeFee
     }
 
     private fun calculateTargetProfitPriceByAmount(input: CalculationInput): BigDecimal? {

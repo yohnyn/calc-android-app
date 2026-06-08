@@ -43,6 +43,7 @@ import com.personal.futurescalculator.model.AveragingDecisionResult
 import com.personal.futurescalculator.model.CalculationInput
 import com.personal.futurescalculator.model.CalculationResult
 import com.personal.futurescalculator.model.PositionSide
+import com.personal.futurescalculator.model.SettlementMode
 import com.personal.futurescalculator.ui.NumberInput
 import com.personal.futurescalculator.ui.PositionSideSelector
 import com.personal.futurescalculator.ui.SectionPanel
@@ -92,7 +93,7 @@ fun AveragingDecisionEntryCard(onClick: () -> Unit) {
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "模拟补仓后均价、仓位和目标价收益变化。",
+                text = "一次补仓模拟器",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -114,6 +115,7 @@ fun AveragingDecisionSection(
     showResultCard: Boolean,
     schemes: List<ExistingScheme>,
     symbol: String,
+    settlementMode: SettlementMode,
     onInputChange: (AveragingDecisionInput) -> Unit,
     onCollapse: () -> Unit,
     onSchemeFilled: (ExistingScheme) -> Unit,
@@ -154,11 +156,6 @@ fun AveragingDecisionSection(
             }
         }
     ) {
-        Text(
-            text = "模拟补仓后均价、仓位和目标价收益变化。",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
         if (schemes.isNotEmpty()) {
             AveragingSoftOutlinedButton(
                 onClick = { showSchemeDialog = true },
@@ -183,7 +180,12 @@ fun AveragingDecisionSection(
                 modifier = Modifier.padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("输入", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "$symbol · ${settlementMode.shortLabel()}",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 PositionSideSelector(
                     selectedSide = input.side,
                     onSideChange = { onInputChange(input.copy(side = it)) }
@@ -660,3 +662,8 @@ private fun averagingPnlText(value: BigDecimal?, text: String): String {
 }
 
 private fun PositionSide.label(): String = if (this == PositionSide.Long) "做多" else "做空"
+
+private fun SettlementMode.shortLabel(): String = when (this) {
+    SettlementMode.UsdtMargined -> "U 本位"
+    SettlementMode.CoinMargined -> "币本位"
+}

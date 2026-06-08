@@ -3,7 +3,6 @@ package com.personal.futurescalculator.ui.settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,7 +10,6 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -22,32 +20,21 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import com.personal.futurescalculator.model.CoinMarginedCalculationMode
-import com.personal.futurescalculator.model.HomeModule
 import com.personal.futurescalculator.model.ThemeMode
 import com.personal.futurescalculator.ui.SectionPanel
 import com.personal.futurescalculator.ui.staticpages.AboutScreen
@@ -56,7 +43,6 @@ import com.personal.futurescalculator.ui.staticpages.FeedbackScreen
 import com.personal.futurescalculator.ui.staticpages.PrivacyPolicyScreen
 import com.personal.futurescalculator.ui.theme.LossRed
 import com.personal.futurescalculator.ui.theme.ProfitGreen
-import kotlin.math.roundToInt
 
 @Composable
 fun SettingsScreen(
@@ -66,12 +52,6 @@ fun SettingsScreen(
     onThemeModeChange: (ThemeMode) -> Unit,
     coinMarginedCalculationMode: CoinMarginedCalculationMode,
     onCoinMarginedCalculationModeChange: (CoinMarginedCalculationMode) -> Unit,
-    moduleOrder: List<HomeModule>,
-    visibleModules: Set<HomeModule>,
-    onModuleOrderChange: (List<HomeModule>) -> Unit,
-    onResetModuleOrder: () -> Unit,
-    onModuleVisibilityChange: (HomeModule, Boolean) -> Unit,
-    onResetModuleVisibility: () -> Unit,
     feedbackText: String,
     onFeedbackChange: (String) -> Unit,
     priceUpdatedAt: Long?,
@@ -98,18 +78,6 @@ fun SettingsScreen(
         )
         SettingsPage.Privacy -> PrivacyPolicyScreen(onBack = { page = SettingsPage.Main })
         SettingsPage.Disclaimer -> DisclaimerScreen(onBack = { page = SettingsPage.Main })
-        SettingsPage.ModuleOrder -> ModuleOrderScreen(
-            moduleOrder = moduleOrder,
-            onModuleOrderChange = onModuleOrderChange,
-            onReset = onResetModuleOrder,
-            onBack = { page = SettingsPage.Main }
-        )
-        SettingsPage.ModuleVisibility -> ModuleVisibilityScreen(
-            visibleModules = visibleModules,
-            onVisibilityChange = onModuleVisibilityChange,
-            onReset = onResetModuleVisibility,
-            onBack = { page = SettingsPage.Main }
-        )
         SettingsPage.AppTheme -> AppThemeScreen(
             themeMode = themeMode,
             onThemeModeChange = onThemeModeChange,
@@ -138,8 +106,6 @@ private enum class SettingsPage {
     About,
     Privacy,
     Disclaimer,
-    ModuleOrder,
-    ModuleVisibility,
     AppTheme,
     CoinMarginedMode,
     PnlColor,
@@ -166,15 +132,21 @@ private fun SettingsHome(
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
             )
-            SettingsMenuButton("App 主题", "选择界面明暗模式") { onOpenPage(SettingsPage.AppTheme) }
-            SettingsMenuButton("币本位计算方式", "选择币数量模式或反向合约模式") { onOpenPage(SettingsPage.CoinMarginedMode) }
-            SettingsMenuButton("盈利亏损配色", "设置盈亏结果颜色与图标显示") { onOpenPage(SettingsPage.PnlColor) }
-            SettingsMenuButton("首页模块排序", "长按拖动调整首页功能顺序") { onOpenPage(SettingsPage.ModuleOrder) }
-            SettingsMenuButton("模块显示管理", "开启或关闭首页功能模块") { onOpenPage(SettingsPage.ModuleVisibility) }
-            SettingsMenuButton("用户反馈", "提交建议并创建 GitHub Issue") { onOpenPage(SettingsPage.Feedback) }
-            SettingsMenuButton("关于 App", "版本信息、数据来源与项目地址") { onOpenPage(SettingsPage.About) }
-            SettingsMenuButton("隐私政策", "查看设备信息与数据使用说明") { onOpenPage(SettingsPage.Privacy) }
-            SettingsMenuButton("免责声明", "查看投资风险与强平价说明") { onOpenPage(SettingsPage.Disclaimer) }
+            SectionPanel(title = "外观") {
+                SettingsMenuButton("App 主题", "选择界面明暗模式") { onOpenPage(SettingsPage.AppTheme) }
+                SettingsMenuButton("盈利亏损配色", "设置盈亏结果颜色与图标显示") { onOpenPage(SettingsPage.PnlColor) }
+            }
+            SectionPanel(title = "币本位") {
+                SettingsMenuButton("币本位默认模式", "选择币数量模式或反向合约模式") { onOpenPage(SettingsPage.CoinMarginedMode) }
+            }
+            SectionPanel(title = "反馈") {
+                SettingsMenuButton("用户反馈", "提交建议并创建 GitHub Issue") { onOpenPage(SettingsPage.Feedback) }
+            }
+            SectionPanel(title = "关于") {
+                SettingsMenuButton("关于 App", "版本信息、数据来源与项目地址") { onOpenPage(SettingsPage.About) }
+                SettingsMenuButton("隐私政策", "查看设备信息与数据使用说明") { onOpenPage(SettingsPage.Privacy) }
+                SettingsMenuButton("免责声明", "查看客观估算与责任边界") { onOpenPage(SettingsPage.Disclaimer) }
+            }
             SettingsSoftOutlinedButton(
                 onClick = onBack,
                 modifier = Modifier.fillMaxWidth(),
@@ -402,146 +374,6 @@ private fun SettingsMenuButton(title: String, supporting: String, onClick: () ->
         Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(text = supporting, style = MaterialTheme.typography.labelMedium)
-        }
-    }
-}
-
-@Composable
-private fun ModuleOrderScreen(
-    moduleOrder: List<HomeModule>,
-    onModuleOrderChange: (List<HomeModule>) -> Unit,
-    onReset: () -> Unit,
-    onBack: () -> Unit
-) {
-    var localOrder by remember(moduleOrder) { mutableStateOf(moduleOrder) }
-    val hapticFeedback = LocalHapticFeedback.current
-    SettingsPageLayout(title = "首页模块排序", onBack = onBack) {
-        SectionPanel(title = "长按拖动排序") {
-            Text(
-                text = "长按模块后上下拖动，顺序会立即保存到本地。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            localOrder.forEach { module ->
-                key(module) {
-                var dragDistance by remember(module) { mutableStateOf(0f) }
-                var itemHeight by remember(module) { mutableStateOf(0f) }
-                var isDragging by remember(module) { mutableStateOf(false) }
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .onSizeChanged { itemHeight = it.height.toFloat() }
-                        .offset { IntOffset(0, if (isDragging) dragDistance.roundToInt() else 0) }
-                        .zIndex(if (isDragging) 1f else 0f)
-                        .shadow(if (isDragging) 12.dp else 0.dp, MaterialTheme.shapes.small)
-                        .pointerInput(module) {
-                            detectDragGesturesAfterLongPress(
-                                onDragStart = {
-                                    isDragging = true
-                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                                },
-                                onDragEnd = {
-                                    isDragging = false
-                                    dragDistance = 0f
-                                },
-                                onDragCancel = {
-                                    isDragging = false
-                                    dragDistance = 0f
-                                },
-                                onDrag = { change, amount ->
-                                    change.consume()
-                                    dragDistance += amount.y
-                                    val currentIndex = localOrder.indexOf(module)
-                                    val swapDistance = (itemHeight * 0.55f).coerceAtLeast(48f)
-                                    val target = when {
-                                        dragDistance > swapDistance -> currentIndex + 1
-                                        dragDistance < -swapDistance -> currentIndex - 1
-                                        else -> currentIndex
-                                    }
-                                    if (target in localOrder.indices && target != currentIndex) {
-                                        val updated = localOrder.toMutableList()
-                                        updated[currentIndex] = localOrder[target]
-                                        updated[target] = module
-                                        localOrder = updated
-                                        onModuleOrderChange(updated)
-                                        dragDistance -= if (target > currentIndex) itemHeight else -itemHeight
-                                        hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    }
-                                }
-                            )
-                        },
-                    shape = MaterialTheme.shapes.small,
-                    color = if (isDragging) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-                    },
-                    border = BorderStroke(
-                        if (isDragging) 2.dp else 1.dp,
-                        if (isDragging) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(module.label, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            if (isDragging) "正在移动" else "长按拖动",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (isDragging) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                }
-            }
-            SettingsSoftOutlinedButton(
-                onClick = {
-                    localOrder = HomeModule.defaultOrder
-                    onReset()
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("恢复默认排序")
-            }
-        }
-    }
-}
-
-@Composable
-private fun ModuleVisibilityScreen(
-    visibleModules: Set<HomeModule>,
-    onVisibilityChange: (HomeModule, Boolean) -> Unit,
-    onReset: () -> Unit,
-    onBack: () -> Unit
-) {
-    SettingsPageLayout(title = "模块显示管理", onBack = onBack) {
-        SectionPanel(title = "首页模块") {
-            Text(
-                text = "仓位参数、止盈止损、计算结果为核心模块，始终显示。这里只管理收益方案对比、补仓决策模拟和历史记录。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            HomeModule.configurableVisibility.forEach { module ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(module.label, fontWeight = FontWeight.SemiBold)
-                    Switch(
-                        checked = module in visibleModules,
-                        onCheckedChange = { onVisibilityChange(module, it) }
-                    )
-                }
-            }
-            SettingsSoftOutlinedButton(
-                onClick = onReset,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("恢复默认显示")
-            }
         }
     }
 }

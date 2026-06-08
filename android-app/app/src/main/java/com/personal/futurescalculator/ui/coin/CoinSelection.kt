@@ -300,7 +300,7 @@ private fun CustomCoinDialog(
                 CompactTextInput(
                     value = symbol,
                     onValueChange = onSymbolChange,
-                    modifier = Modifier.widthIn(max = 220.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     label = "币种名称，例如 ABC"
                 )
                 NumberInput(

@@ -21,7 +21,6 @@ import com.personal.futurescalculator.model.CalculationResult
 import com.personal.futurescalculator.model.CoinAsset
 import com.personal.futurescalculator.model.CoinMarginedCalculationMode
 import com.personal.futurescalculator.model.CoinMarginedResult
-import com.personal.futurescalculator.model.HomeModule
 import com.personal.futurescalculator.model.ComparisonItem
 import com.personal.futurescalculator.model.ComparisonResult
 import com.personal.futurescalculator.model.SettlementMode
@@ -56,8 +55,6 @@ data class CalculatorUiState(
     val coinMarginedResult: CoinMarginedResult? = null,
     val hasSeenCoinMarginedModeDialog: Boolean = false,
     val showCoinMarginedModeDialog: Boolean = false,
-    val moduleOrder: List<HomeModule> = HomeModule.defaultOrder,
-    val visibleModules: Set<HomeModule> = HomeModule.entries.toSet(),
     val averagingExpanded: Boolean = true,
     val themeMode: ThemeMode = ThemeMode.System,
     val historyRecords: List<HistoryRecord> = emptyList()
@@ -83,8 +80,6 @@ class CalculatorViewModel(context: Context) : ViewModel() {
             coins = cached + custom,
             selectedCoinId = coinRepository.loadSelectedCoinId(),
             priceUpdatedAt = coinRepository.loadUpdatedAt(),
-            moduleOrder = uiPreferencesRepository.loadModuleOrder(),
-            visibleModules = uiPreferencesRepository.loadVisibleModules(),
             averagingExpanded = uiPreferencesRepository.loadAveragingExpanded(),
             themeMode = uiPreferencesRepository.loadThemeMode(),
             coinMarginedCalculationMode = uiPreferencesRepository.loadCoinMarginedCalculationMode()
@@ -193,8 +188,6 @@ class CalculatorViewModel(context: Context) : ViewModel() {
                 selectedCoinId = state.selectedCoinId,
                 priceUpdatedAt = state.priceUpdatedAt,
                 priceLoadError = state.priceLoadError,
-                moduleOrder = state.moduleOrder,
-                visibleModules = state.visibleModules,
                 averagingExpanded = state.averagingExpanded,
                 themeMode = state.themeMode,
                 coinMarginedCalculationMode = state.coinMarginedCalculationMode,
@@ -202,29 +195,6 @@ class CalculatorViewModel(context: Context) : ViewModel() {
                 historyRecords = state.historyRecords
             )
         }
-    }
-
-    fun updateModuleOrder(order: List<HomeModule>) {
-        uiPreferencesRepository.saveModuleOrder(order)
-        _uiState.value = _uiState.value.copy(moduleOrder = order)
-    }
-
-    fun resetModuleOrder() {
-        updateModuleOrder(HomeModule.defaultOrder)
-    }
-
-    fun setModuleVisible(module: HomeModule, visible: Boolean) {
-        val updated = (_uiState.value.visibleModules + HomeModule.alwaysVisible).toMutableSet().apply {
-            if (visible) add(module) else remove(module)
-        }
-        uiPreferencesRepository.saveVisibleModules(updated)
-        _uiState.value = _uiState.value.copy(visibleModules = updated)
-    }
-
-    fun resetModuleVisibility() {
-        val updated = HomeModule.entries.toSet()
-        uiPreferencesRepository.saveVisibleModules(updated)
-        _uiState.value = _uiState.value.copy(visibleModules = updated)
     }
 
     fun setAveragingExpanded(expanded: Boolean) {

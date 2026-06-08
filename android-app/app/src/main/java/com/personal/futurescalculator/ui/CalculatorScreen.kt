@@ -2,27 +2,18 @@ package com.personal.futurescalculator.ui
 
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -40,7 +31,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -48,24 +38,11 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import com.personal.futurescalculator.model.AmountField
-import com.personal.futurescalculator.model.AveragingDecisionInput
-import com.personal.futurescalculator.model.AveragingDecisionResult
 import com.personal.futurescalculator.model.CalculationInput
-import com.personal.futurescalculator.model.CalculationResult
 import com.personal.futurescalculator.model.HomeModule
-import com.personal.futurescalculator.model.HistoryCategory
-import com.personal.futurescalculator.model.HistoryField
-import com.personal.futurescalculator.model.HistoryRecord
-import com.personal.futurescalculator.model.HistorySection
 import com.personal.futurescalculator.model.ComparisonItem
-import com.personal.futurescalculator.model.MarginMode
-import com.personal.futurescalculator.model.PositionSide
 import com.personal.futurescalculator.model.SettlementMode
-import com.personal.futurescalculator.model.ThemeMode
 import com.personal.futurescalculator.ui.theme.LossRed
 import com.personal.futurescalculator.ui.theme.LocalProfitLossPalette
 import com.personal.futurescalculator.ui.theme.ProfitGreen
@@ -86,7 +63,15 @@ import com.personal.futurescalculator.ui.comparison.MAIN_SCHEME_ID
 import com.personal.futurescalculator.ui.comparison.buildComparisonSchemes
 import com.personal.futurescalculator.ui.comparison.createComparisonHistorySnapshot
 import com.personal.futurescalculator.ui.comparison.selectedComparisonValidationMessage
+import com.personal.futurescalculator.ui.dialogs.MissingParametersDialog
+import com.personal.futurescalculator.ui.dialogs.OperationRequirementDialog
+import com.personal.futurescalculator.ui.fees.FeeSettingsDialog
 import com.personal.futurescalculator.ui.history.HistoryScreen
+import com.personal.futurescalculator.ui.history.createAveragingHistorySnapshot
+import com.personal.futurescalculator.ui.history.createProfitHistorySnapshot
+import com.personal.futurescalculator.ui.home.HomeBottomActions
+import com.personal.futurescalculator.ui.home.SupportAuthorCard
+import com.personal.futurescalculator.ui.position.PositionInputSection
 import com.personal.futurescalculator.ui.results.CoinMarginedResultDialog
 import com.personal.futurescalculator.ui.results.CompactExpandableResultCard
 import com.personal.futurescalculator.ui.results.EmptyResult
@@ -133,12 +118,14 @@ fun CalculatorScreen(
     var pnlDisplayMode by rememberSaveable { mutableStateOf(PnlDisplayMode.ProfitGreen) }
     var feedbackText by rememberSaveable { mutableStateOf("") }
     var comparisonSectionExpanded by rememberSaveable { mutableStateOf(true) }
-    val hasTargetStopPlan = uiState.input.totalFunds != null ||
+    var fullCrossTotalFundsEnabled by rememberSaveable { mutableStateOf(uiState.input.totalFunds != null) }
+    val hasTargetStopPlan = uiState.input.takeProfitPrice != null ||
+        uiState.input.stopLossPrice != null ||
         uiState.input.targetProfitAmount != null ||
         uiState.input.targetRoiPercent != null ||
         uiState.input.maxLossAmount != null ||
         uiState.input.maxLossRoiPercent != null
-    var targetStopExpanded by rememberSaveable { mutableStateOf(hasTargetStopPlan) }
+    var targetStopEnabled by rememberSaveable { mutableStateOf(hasTargetStopPlan) }
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
@@ -210,7 +197,12 @@ fun CalculatorScreen(
     }
     LaunchedEffect(hasTargetStopPlan) {
         if (hasTargetStopPlan) {
-            targetStopExpanded = true
+            targetStopEnabled = true
+        }
+    }
+    LaunchedEffect(uiState.input.totalFunds) {
+        if (uiState.input.totalFunds != null) {
+            fullCrossTotalFundsEnabled = true
         }
     }
     CompositionLocalProvider(LocalProfitLossPalette provides profitLossPalette) {
@@ -218,12 +210,6 @@ fun CalculatorScreen(
         SettingsScreen(
             pnlDisplayMode = pnlDisplayMode,
             onPnlDisplayModeChange = { pnlDisplayMode = it },
-            moduleOrder = uiState.moduleOrder,
-            visibleModules = uiState.visibleModules,
-            onModuleOrderChange = viewModel::updateModuleOrder,
-            onResetModuleOrder = viewModel::resetModuleOrder,
-            onModuleVisibilityChange = viewModel::setModuleVisible,
-            onResetModuleVisibility = viewModel::resetModuleVisibility,
             feedbackText = feedbackText,
             onFeedbackChange = { feedbackText = it },
             priceUpdatedAt = uiState.priceUpdatedAt,
@@ -382,6 +368,22 @@ fun CalculatorScreen(
                     .padding(horizontal = 16.dp, vertical = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    text = "仓位助手",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Text(
+                    text = "我负责计算，你负责决策",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.small,
@@ -407,174 +409,22 @@ fun CalculatorScreen(
                 }
             }
 
-            uiState.moduleOrder.filter { it in uiState.visibleModules }.forEach { module ->
+            HomeModule.defaultOrder.forEach { module ->
             when (module) {
             HomeModule.Position -> {
-            SectionPanel(
-                title = "仓位参数",
-                trailing = {
-                    TextButton(onClick = { showFeeSettings = true }) {
-                        Text("高级设置")
-                    }
-                }
-            ) {
-                InputRow {
-                    PositionSideSelector(
-                        selectedSide = uiState.input.side,
-                        onSideChange = { viewModel.updateInput(uiState.input.copy(side = it)) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    MarginModeSelector(
-                        selectedMode = uiState.input.marginMode,
-                        onModeChange = { viewModel.updateInput(uiState.input.copy(marginMode = it)) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                InputRow {
-                    NumberInput(
-                        value = uiState.input.entryPrice,
-                        onValueChange = { viewModel.updateInput(uiState.input.copy(entryPrice = it)) },
-                        label = "开仓价",
-                        modifier = Modifier.weight(1f),
-                        onSubmit = submitMainResult
-                    )
-                    if (uiState.settlementMode == SettlementMode.UsdtMargined) {
-                        NumberInput(
-                            value = uiState.input.margin,
-                            onValueChange = { viewModel.updateAmountInput(AmountField.Margin, it) },
-                            label = "保证金 USDT",
-                            modifier = Modifier.weight(1f),
-                            onSubmit = submitMainResult
-                        )
-                    } else {
-                        NumberInput(
-                            value = uiState.input.quantity,
-                            onValueChange = { viewModel.updateAmountInput(AmountField.Quantity, it) },
-                            label = "${selectedCoin?.symbol ?: "币"} 数量",
-                            modifier = Modifier.weight(1f),
-                            onSubmit = submitMainResult
-                        )
-                    }
-                }
-                NumberInput(
-                    value = uiState.input.exitPrice,
-                    onValueChange = {
-                        viewModel.updateInput(
-                            uiState.input.copy(
-                                exitPrice = it,
-                                targetProfitAmount = null,
-                                targetRoiPercent = null,
-                                maxLossAmount = null,
-                                maxLossRoiPercent = null
-                            )
-                        )
-                    },
-                    label = "平仓价",
-                    onSubmit = submitMainResult
-                )
-                LeverageSelector(
-                    leverage = uiState.input.leverage,
-                    onLeverageChange = { viewModel.updateInput(uiState.input.copy(leverage = it)) }
-                )
-                Text(
-                    text = if (uiState.settlementMode == SettlementMode.UsdtMargined) {
-                        "U 本位使用保证金与杠杆计算仓位，填写平仓价后可查看本单实际盈亏。"
-                    } else {
-                        "币本位使用币数量计算，填写平仓价后收益按当前币种价格折算。"
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            }
-
-            HomeModule.TargetStop -> {
-            SectionPanel(
-                title = "止盈止损",
-                trailing = {
-                    TextButton(
-                        onClick = { targetStopExpanded = !targetStopExpanded },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
-                    ) {
-                        Text(if (targetStopExpanded) "收起" else "展开", fontWeight = FontWeight.Bold)
-                    }
-                }
-            ) {
-                if (!targetStopExpanded) {
-                    Text(
-                        text = "可选。只想先开单时不用填写；需要规划盈利、亏损或全仓强平风险时再展开。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else if (uiState.settlementMode == SettlementMode.UsdtMargined) {
-                    Text(
-                        text = "这里用于计划止盈止损，不影响仓位建立。填写任一目标后，会反推出对应止盈价或止损价；仓位参数里的平仓价会优先按实际平仓价计算。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (uiState.input.marginMode == MarginMode.Cross) {
-                        NumberInput(
-                            value = uiState.input.totalFunds,
-                            onValueChange = { viewModel.updateInput(uiState.input.copy(totalFunds = it)) },
-                            label = "账户总资金 USDT（全仓强平估算）",
-                            onSubmit = submitMainResult
-                        )
-                        Text(
-                            text = "全仓时账户总资金会影响强平价估算；只关心本单盈亏时可先不填。",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Text(
-                        text = "止盈：按收益目标反推止盈价",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    InputRow {
-                        NumberInput(
-                            value = uiState.input.targetProfitAmount,
-                            onValueChange = { viewModel.updateInput(uiState.input.copy(targetProfitAmount = it, targetRoiPercent = null, exitPrice = null)) },
-                            label = "目标收益 USDT",
-                            modifier = Modifier.weight(1f),
-                            onSubmit = submitMainResult
-                        )
-                        NumberInput(
-                            value = uiState.input.targetRoiPercent,
-                            onValueChange = { viewModel.updateInput(uiState.input.copy(targetProfitAmount = null, targetRoiPercent = it, exitPrice = null)) },
-                            label = "目标收益 ROI %",
-                            modifier = Modifier.weight(1f),
-                            onSubmit = submitMainResult
-                        )
-                    }
-                    Text(
-                        text = "止损：按亏损目标反推止损价",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    InputRow {
-                        NumberInput(
-                            value = uiState.input.maxLossAmount,
-                            onValueChange = { viewModel.updateInput(uiState.input.copy(maxLossAmount = it, maxLossRoiPercent = null, exitPrice = null)) },
-                            label = "目标亏损 USDT",
-                            modifier = Modifier.weight(1f),
-                            onSubmit = submitMainResult
-                        )
-                        NumberInput(
-                            value = uiState.input.maxLossRoiPercent,
-                            onValueChange = { viewModel.updateInput(uiState.input.copy(maxLossAmount = null, maxLossRoiPercent = it, exitPrice = null)) },
-                            label = "目标亏损 ROI %",
-                            modifier = Modifier.weight(1f),
-                            onSubmit = submitMainResult
-                        )
-                    }
-                } else {
-                    Text(
-                        text = "币本位当前先按仓位参数里的平仓价计算盈亏，暂不支持通过收益目标反推止盈止损价格。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+            PositionInputSection(
+                input = uiState.input,
+                settlementMode = uiState.settlementMode,
+                symbol = selectedCoin?.symbol ?: "币",
+                fullCrossTotalFundsEnabled = fullCrossTotalFundsEnabled,
+                targetStopEnabled = targetStopEnabled,
+                onFullCrossTotalFundsEnabledChange = { fullCrossTotalFundsEnabled = it },
+                onTargetStopEnabledChange = { targetStopEnabled = it },
+                onInputChange = viewModel::updateInput,
+                onAmountInputChange = viewModel::updateAmountInput,
+                onShowFeeSettings = { showFeeSettings = true },
+                onSubmit = submitMainResult
+            )
             }
 
             HomeModule.Result -> {
@@ -633,6 +483,7 @@ fun CalculatorScreen(
                     showResultCard = RESULT_CARD_AVERAGING in revealedResultCards,
                     schemes = averagingSchemes,
                     symbol = averagingSymbolOverride ?: selectedCoin?.symbol ?: "币",
+                    settlementMode = uiState.settlementMode,
                     onInputChange = viewModel::updateAveragingDecisionInput,
                     onCollapse = { viewModel.setAveragingExpanded(false) },
                     onSchemeFilled = { averagingSymbolOverride = it.symbol },
@@ -691,7 +542,7 @@ fun CalculatorScreen(
                     )
                 } else {
                 Text(
-                    text = "比较多个交易方案最终收益",
+                    text = "多个开仓方案横向比较",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -754,7 +605,6 @@ fun CalculatorScreen(
                 }
             }
             }
-            HomeModule.History -> Unit
             }
             }
 
@@ -771,21 +621,9 @@ fun CalculatorScreen(
             }
             SupportAuthorCard(onClick = { showDonation = true })
             }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                SoftOutlinedButton(
-                    onClick = { showHistory = true },
-                    modifier = Modifier.weight(1f),
-                    shape = MaterialTheme.shapes.small
-                ) {
-                    Text("历史")
-                }
-                SoftOutlinedButton(
-                    onClick = {
+            HomeBottomActions(
+                onHistoryClick = { showHistory = true },
+                onResetClick = {
                         showFeeSettings = false
                         showMainResultDialog = false
                         showCoinMarginedResultDialog = false
@@ -798,77 +636,10 @@ fun CalculatorScreen(
                         viewModel.reset()
                         coroutineScope.launch { scrollState.animateScrollTo(0) }
                     },
-                    modifier = Modifier.weight(1f),
-                    shape = MaterialTheme.shapes.small
-                ) {
-                    Text("↺ 重置")
-                }
-                Button(
-                    onClick = { showSettings = true },
-                    modifier = Modifier.weight(1f),
-                    shape = MaterialTheme.shapes.small
-                ) {
-                    Text("⚙ 设置")
-                }
-            }
-        }
-    }
-    }
-}
-
-@Composable
-private fun SupportAuthorCard(onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = MaterialTheme.shapes.small,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.30f)
-        ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.24f))
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                modifier = Modifier.width(34.dp).height(34.dp),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "☕",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                }
-            }
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                Text(
-                    text = "支持作者",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "如果这个工具帮助到了你，\n欢迎支持后续更新。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Text(
-                text = "查看",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary
+                onSettingsClick = { showSettings = true }
             )
         }
+    }
     }
 }
 
@@ -940,248 +711,3 @@ private fun TwoOptionModeSelector(
         ) { Text(secondText) }
     }
 }
-
-@Composable
-private fun FeeSettingsDialog(
-    input: CalculationInput,
-    onConfirm: (CalculationInput) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var openFee by remember(input.openFeeRatePercent) { mutableStateOf(input.openFeeRatePercent) }
-    var closeFee by remember(input.closeFeeRatePercent) { mutableStateOf(input.closeFeeRatePercent) }
-    var maintenanceMarginRate by remember(input.maintenanceMarginRatePercent) {
-        mutableStateOf(input.maintenanceMarginRatePercent)
-    }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .widthIn(max = 400.dp),
-            shape = MaterialTheme.shapes.medium,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.16f))
-        ) {
-            Column(
-                modifier = Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "费率设置",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "费率单位为百分比，修改后点击确认生效。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                InputRow {
-                    NumberInput(
-                        value = openFee,
-                        onValueChange = { openFee = it ?: BigDecimal.ZERO },
-                        label = "开仓费率 %",
-                        modifier = Modifier.weight(1f)
-                    )
-                    NumberInput(
-                        value = closeFee,
-                        onValueChange = { closeFee = it ?: BigDecimal.ZERO },
-                        label = "平仓费率 %",
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                NumberInput(
-                    value = maintenanceMarginRate,
-                    onValueChange = { maintenanceMarginRate = it ?: BigDecimal.ZERO },
-                    label = "维持保证金率 %"
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(
-                        onClick = {
-                            openFee = BigDecimal("0.05")
-                            closeFee = BigDecimal("0.05")
-                            maintenanceMarginRate = BigDecimal("0.5")
-                        }
-                    ) {
-                        Text("恢复默认")
-                    }
-                    TextButton(onClick = onDismiss) {
-                        Text("取消", fontWeight = FontWeight.SemiBold)
-                    }
-                    Button(
-                        onClick = {
-                            onConfirm(
-                                input.copy(
-                                    openFeeRatePercent = openFee,
-                                    closeFeeRatePercent = closeFee,
-                                    maintenanceMarginRatePercent = maintenanceMarginRate
-                                )
-                            )
-                        },
-                        shape = MaterialTheme.shapes.small
-                    ) {
-                        Text("确认")
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MissingParametersDialog(
-    message: String,
-    onDismiss: () -> Unit
-) {
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier.fillMaxWidth().widthIn(max = 400.dp),
-            shape = MaterialTheme.shapes.medium,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
-        ) {
-            Column(
-                modifier = Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "补仓参数未填写完整",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "请先填写：$message",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Button(
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.small
-                ) {
-                    Text("知道了")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun OperationRequirementDialog(
-    message: String,
-    onDismiss: () -> Unit
-) {
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier.fillMaxWidth().widthIn(max = 400.dp),
-            shape = MaterialTheme.shapes.medium,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.24f))
-        ) {
-            Column(
-                modifier = Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "暂时无法操作",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Button(
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.small
-                ) {
-                    Text("知道了")
-                }
-            }
-        }
-    }
-}
-
-private fun createProfitHistorySnapshot(
-    input: CalculationInput,
-    result: CalculationResult,
-    symbol: String,
-    settlementMode: SettlementMode
-): HistoryRecord = HistoryRecord(
-    id = "history_${System.currentTimeMillis()}",
-    category = HistoryCategory.ProfitCalculation,
-    title = "$symbol ${input.side.label()}",
-    summary = "${DecimalFormatters.formatPositiveNegative(result.netPnl)} USDT",
-    roiSummary = DecimalFormatters.formatPercentage(result.roiPercent),
-    savedAt = System.currentTimeMillis(),
-    sections = listOf(
-        HistorySection("交易参数", listOf(
-            HistoryField("币种", symbol),
-            HistoryField("合约模式", if (settlementMode == SettlementMode.UsdtMargined) "U 本位" else "币本位"),
-            HistoryField("方向", input.side.label()),
-            HistoryField("保证金模式", input.marginMode.label()),
-            HistoryField("杠杆", "${input.leverage.stripTrailingZeros().toPlainString()}x"),
-            HistoryField("保证金", "${DecimalFormatters.formatCurrency(input.margin)} USDT"),
-            HistoryField("数量", "${DecimalFormatters.formatQuantity(result.quantity)} $symbol"),
-            HistoryField("开仓价", "${DecimalFormatters.formatCurrency(input.entryPrice)} USDT"),
-            HistoryField("平仓价", "${DecimalFormatters.formatCurrency(input.exitPrice)} USDT"),
-            HistoryField("开仓费率", "${input.openFeeRatePercent.stripTrailingZeros().toPlainString()}%"),
-            HistoryField("平仓费率", "${input.closeFeeRatePercent.stripTrailingZeros().toPlainString()}%"),
-            HistoryField("维持保证金率", "${input.maintenanceMarginRatePercent.stripTrailingZeros().toPlainString()}%"),
-            HistoryField("总资金", input.totalFunds?.let { "${DecimalFormatters.formatCurrency(it)} USDT" } ?: "未填写")
-        )),
-        HistorySection("保存时结果", listOf(
-            HistoryField("仓位价值", "${DecimalFormatters.formatCurrency(result.positionValue)} USDT"),
-            HistoryField("总手续费约", "${DecimalFormatters.formatCurrency(result.totalFee)} USDT"),
-            HistoryField("净盈亏", "${DecimalFormatters.formatPositiveNegative(result.netPnl)} USDT"),
-            HistoryField("ROI", DecimalFormatters.formatPercentage(result.roiPercent)),
-            HistoryField("估算强平价", result.liquidationPrice?.let { "${DecimalFormatters.formatCurrency(it)} USDT" } ?: "无法可靠估算"),
-            HistoryField("距离强平", DecimalFormatters.formatPercentage(result.distanceToLiquidationPercent))
-        ))
-    )
-)
-private fun createAveragingHistorySnapshot(
-    input: AveragingDecisionInput,
-    result: AveragingDecisionResult,
-    symbol: String
-): HistoryRecord = HistoryRecord(
-    id = "history_${System.currentTimeMillis()}",
-    category = HistoryCategory.AveragingSimulation,
-    title = "$symbol 补仓模拟",
-    summary = "${DecimalFormatters.formatPositiveNegative(result.pnlChange)} USDT",
-    roiSummary = null,
-    savedAt = System.currentTimeMillis(),
-    sections = listOf(
-        HistorySection("补仓参数", listOf(
-            HistoryField("方向", input.side.label()),
-            HistoryField("当前均价", "${DecimalFormatters.formatCurrency(input.currentEntryPrice)} USDT"),
-            HistoryField("当前数量", "${DecimalFormatters.formatQuantity(input.currentQuantity)} $symbol"),
-            HistoryField("当前保证金", "${DecimalFormatters.formatCurrency(input.currentMargin)} USDT"),
-            HistoryField("当前杠杆", "${DecimalFormatters.formatQuantity(input.currentLeverage)}x"),
-            HistoryField("补仓价格", "${DecimalFormatters.formatCurrency(input.addEntryPrice)} USDT"),
-            HistoryField("补仓金额", "${DecimalFormatters.formatCurrency(result.addAmount)} USDT"),
-            HistoryField("补仓数量", "${DecimalFormatters.formatQuantity(result.quantityIncrease)} $symbol"),
-            HistoryField("目标平仓价", "${DecimalFormatters.formatCurrency(input.targetExitPrice)} USDT")
-        )),
-        HistorySection("保存时结果", listOf(
-            HistoryField("补仓后均价", "${DecimalFormatters.formatCurrency(result.newAveragePrice)} USDT"),
-            HistoryField("补仓后总仓位", "${DecimalFormatters.formatQuantity(result.newQuantity)} $symbol"),
-            HistoryField("补仓前收益", "${DecimalFormatters.formatPositiveNegative(result.pnlWithoutAdding)} USDT"),
-            HistoryField("补仓后收益", "${DecimalFormatters.formatPositiveNegative(result.pnlAfterAdding)} USDT"),
-            HistoryField("收益变化", "${DecimalFormatters.formatPositiveNegative(result.pnlChange)} USDT"),
-            HistoryField("风险变化", "未纳入本次模拟")
-        ))
-    )
-)
-
-private fun PositionSide.label(): String = if (this == PositionSide.Long) "做多" else "做空"
-
-private fun MarginMode.label(): String = if (this == MarginMode.Cross) "全仓" else "逐仓"

@@ -1,6 +1,7 @@
 package com.personal.futurescalculator.model
 
 enum class CopyFormat(val label: String) {
-    Summary("摘要版"),
+    Ask("每次询问"),
+    Summary("简洁版"),
     Detail("详细版")
 }

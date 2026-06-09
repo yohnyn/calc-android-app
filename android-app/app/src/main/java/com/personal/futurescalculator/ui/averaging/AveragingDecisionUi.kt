@@ -43,7 +43,6 @@ import com.personal.futurescalculator.model.CalculationResult
 import com.personal.futurescalculator.model.PositionSide
 import com.personal.futurescalculator.model.SettlementMode
 import com.personal.futurescalculator.ui.NumberInput
-import com.personal.futurescalculator.ui.PositionSideSelector
 import com.personal.futurescalculator.ui.SectionPanel
 import com.personal.futurescalculator.ui.theme.LocalProfitLossPalette
 import com.personal.futurescalculator.util.DecimalFormatters
@@ -74,30 +73,24 @@ fun averagingMissingFields(input: AveragingDecisionInput): List<String> = buildL
 @Composable
 fun AveragingDecisionEntryCard(onClick: () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = MaterialTheme.shapes.small,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.52f)
         ),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.28f))
     ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = "补仓助手",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
-            Text(
-                text = "模拟一次补仓后的成本和目标价收益变化",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            TextButton(onClick = onClick) {
-                Text("展开", fontWeight = FontWeight.Bold)
-            }
+            Text("展开 ˅", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
         }
     }
 }
@@ -168,38 +161,7 @@ fun AveragingDecisionSection(
                 modifier = Modifier.padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                PositionSideSelector(
-                    selectedSide = input.side,
-                    onSideChange = { onInputChange(input.copy(side = it)) }
-                )
-                AveragingInputRow {
-                    NumberInput(
-                        value = input.currentEntryPrice,
-                        onValueChange = { onInputChange(input.copy(currentEntryPrice = it)) },
-                        label = "当前均价",
-                        modifier = Modifier.weight(1f)
-                    )
-                    NumberInput(
-                        value = input.currentQuantity,
-                        onValueChange = { onInputChange(input.copy(currentQuantity = it)) },
-                        label = "当前 $symbol 数量",
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                AveragingInputRow {
-                    NumberInput(
-                        value = input.currentMargin,
-                        onValueChange = { onInputChange(input.copy(currentMargin = it)) },
-                        label = "当前保证金",
-                        modifier = Modifier.weight(1f)
-                    )
-                    NumberInput(
-                        value = input.currentLeverage,
-                        onValueChange = { onInputChange(input.copy(currentLeverage = it)) },
-                        label = "当前杠杆",
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+                CurrentPositionSummary(input = input, symbol = symbol)
                 NumberInput(
                     value = input.addEntryPrice,
                     onValueChange = { onInputChange(input.copy(addEntryPrice = it)) },
@@ -237,10 +199,33 @@ fun AveragingDecisionSection(
 }
 
 @Composable
+private fun CurrentPositionSummary(input: AveragingDecisionInput, symbol: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text("当前仓位", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            Text(
+                text = "${input.side.label()} · ${DecimalFormatters.formatQuantity(input.currentLeverage)}x · 均价 ${DecimalFormatters.formatCurrency(input.currentEntryPrice)} · 数量 ${DecimalFormatters.formatQuantity(input.currentQuantity)} $symbol",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
 fun AveragingResultDialog(
     input: AveragingDecisionInput,
     result: AveragingDecisionResult,
     symbol: String,
+    onCopyResult: () -> Unit,
     onDismiss: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
@@ -256,6 +241,13 @@ fun AveragingResultDialog(
             ) {
                 Text("补仓计算完成", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 AveragingDecisionResultCard(input, result, symbol)
+                OutlinedButton(
+                    onClick = onCopyResult,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.small
+                ) {
+                    Text("复制补仓结果")
+                }
                 Button(
                     onClick = onDismiss,
                     modifier = Modifier.fillMaxWidth(),
@@ -346,7 +338,7 @@ private fun SchemeSelectionDialog(
 
 @Composable
 private fun AveragingInputDetails(input: AveragingDecisionInput, symbol: String) {
-    SectionPanel(title = "补仓参数") {
+    SectionPanel(title = "详细数据") {
         Text(input.side.label(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         AveragingInputRow {
             AveragingMetricTile("当前均价", "${DecimalFormatters.formatCurrency(input.currentEntryPrice)} USDT", modifier = Modifier.weight(1f))
@@ -394,32 +386,17 @@ private fun AveragingDecisionResultCard(
             modifier = Modifier.padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            AveragingInputRow {
-                AveragingMetricTile(
-                    label = "补仓后成本价",
-                    value = "${DecimalFormatters.formatCurrency(result.newAveragePrice)} USDT",
-                    modifier = Modifier.weight(1f)
-                )
-                AveragingMetricTile(
-                    label = "补仓后回本价",
-                    value = "${DecimalFormatters.formatCurrency(result.newAveragePrice)} USDT",
-                    modifier = Modifier.weight(1f)
-                )
-            }
+            AveragingMetricTile(
+                label = "补仓后成本 / 回本价",
+                value = "${DecimalFormatters.formatCurrency(result.newAveragePrice)} USDT"
+            )
             AveragingMetricTile(
                 label = "目标价收益",
                 value = "${averagingPnlText(result.pnlAfterAdding, DecimalFormatters.formatPositiveNegative(result.pnlAfterAdding))} USDT",
                 valueColor = averagingPnlColor(result.pnlAfterAdding)
             )
-            targetRoi?.let {
-                AveragingMetricTile(
-                    label = "目标价 ROI",
-                    value = DecimalFormatters.formatPercentage(it),
-                    valueColor = averagingPnlColor(it)
-                )
-            }
             AveragingMetricTile(
-                label = "收益变化",
+                label = "相比不补仓",
                 value = "${averagingPnlText(result.pnlChange, DecimalFormatters.formatPositiveNegative(result.pnlChange))} USDT",
                 valueColor = changeColor
             )

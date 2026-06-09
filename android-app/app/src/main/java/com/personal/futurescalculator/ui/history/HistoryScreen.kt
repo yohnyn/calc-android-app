@@ -1,10 +1,12 @@
 package com.personal.futurescalculator.ui.history
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -14,12 +16,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -31,6 +35,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -53,19 +58,29 @@ fun HistoryScreen(
     records: List<HistoryRecord>,
     plans: List<SavedPlan>,
     coins: List<CoinAsset>,
+    startOnPlans: Boolean = false,
     onToggleFavorite: (String) -> Unit,
     onDelete: (Set<String>) -> Unit,
     onClearCategory: (HistoryCategory?) -> Unit,
     onOpenPlan: (SavedPlan) -> Unit,
     onAddPlanToComparison: (SavedPlan) -> Unit,
     onDeletePlan: (String) -> Unit,
+    onRenamePlan: (String, String) -> Unit,
+    onUpdatePlanNote: (String, String) -> Unit,
+    onDuplicatePlan: (SavedPlan) -> Unit,
+    onSaveHistoryAsPlan: (HistoryRecord) -> Boolean,
     onBack: () -> Unit
 ) {
-    var tab by rememberSaveable { mutableStateOf(HistoryTab.Records) }
+    var tab by rememberSaveable { mutableStateOf(if (startOnPlans) HistoryTab.Plans else HistoryTab.Records) }
     var category by rememberSaveable { mutableStateOf<HistoryCategory?>(null) }
     var selectedRecord by remember { mutableStateOf<HistoryRecord?>(null) }
     var selectedIds by rememberSaveable { mutableStateOf(emptySet<String>()) }
     var showDeleteConfirm by rememberSaveable { mutableStateOf(false) }
+    var pendingClearCategory by rememberSaveable { mutableStateOf<HistoryCategory?>(null) }
+    var showClearConfirm by rememberSaveable { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(startOnPlans) {
+        tab = if (startOnPlans) HistoryTab.Plans else HistoryTab.Records
+    }
     BackHandler {
         if (selectedRecord != null) {
             selectedRecord = null
@@ -79,6 +94,7 @@ fun HistoryScreen(
         HistoryDetailScreen(
             record = records.firstOrNull { it.id == record.id } ?: record,
             onToggleFavorite = onToggleFavorite,
+            onSaveAsPlan = onSaveHistoryAsPlan,
             onBack = { selectedRecord = null }
         )
         return
@@ -106,7 +122,84 @@ fun HistoryScreen(
             }
         )
     }
-    HistoryPageLayout(title = "历史记录", onBack = onBack, showBottomBack = false) {
+    if (showClearConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearConfirm = false },
+            title = { Text("清空历史记录？") },
+            text = { Text("清空后无法恢复。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onClearCategory(pendingClearCategory)
+                        pendingClearCategory = null
+                        showClearConfirm = false
+                    }
+                ) {
+                    Text("清空", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        pendingClearCategory = null
+                        showClearConfirm = false
+                    }
+                ) {
+                    Text("取消", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        )
+    }
+    HistoryPageLayout(
+        title = null,
+        onBack = onBack,
+        footer = {
+            if (selectedIds.isNotEmpty()) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { showDeleteConfirm = true },
+                        modifier = Modifier.weight(1f),
+                        shape = MaterialTheme.shapes.small
+                    ) {
+                        Text("删除选中记录（${selectedIds.size}）")
+                    }
+                    HistorySoftOutlinedButton(
+                        onClick = { selectedIds = emptySet() },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("取消选择")
+                    }
+                }
+            } else if (tab == HistoryTab.Records) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (filtered.isNotEmpty()) {
+                        HistorySoftOutlinedButton(
+                            onClick = {
+                                pendingClearCategory = category
+                                showClearConfirm = true
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(if (category == null) "清空历史记录" else "清空分类")
+                        }
+                    }
+                    HistorySoftOutlinedButton(
+                        onClick = onBack,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("返回计算器")
+                    }
+                }
+            } else {
+                HistorySoftOutlinedButton(
+                    onClick = onBack,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("返回计算器")
+                }
+            }
+        }
+    ) {
         HistoryTopTabs(
             selected = tab,
             onSelect = {
@@ -118,15 +211,18 @@ fun HistoryScreen(
             PlanLibrarySection(
                 plans = plans,
                 coins = coins,
-                onOpenPlan = onOpenPlan,
-                onAddPlanToComparison = onAddPlanToComparison,
-                onDeletePlan = onDeletePlan,
-                onBack = onBack
-            )
+            onOpenPlan = onOpenPlan,
+            onAddPlanToComparison = onAddPlanToComparison,
+            onDeletePlan = onDeletePlan,
+            onRenamePlan = onRenamePlan,
+            onUpdatePlanNote = onUpdatePlanNote,
+            onDuplicatePlan = onDuplicatePlan,
+            onBack = onBack
+        )
             return@HistoryPageLayout
         }
         if (records.isEmpty()) {
-            EmptyHistoryState(onBack = onBack)
+            EmptyHistoryState()
             return@HistoryPageLayout
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -162,22 +258,6 @@ fun HistoryScreen(
                 onLongClick = { selectedIds = selectedIds + record.id }
             )
         }
-        if (selectedIds.isNotEmpty()) {
-            Button(onClick = { showDeleteConfirm = true }, modifier = Modifier.fillMaxWidth()) {
-                Text("删除选中记录（${selectedIds.size}）")
-            }
-            HistorySoftOutlinedButton(onClick = { selectedIds = emptySet() }, modifier = Modifier.fillMaxWidth()) {
-                Text("取消选择")
-            }
-        }
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (filtered.isNotEmpty()) {
-                HistorySoftOutlinedButton(onClick = { onClearCategory(category) }, modifier = Modifier.weight(1f)) {
-                    Text(if (category == null) "清空全部" else "清空分类")
-                }
-            }
-            HistorySoftOutlinedButton(onClick = onBack, modifier = Modifier.weight(1f)) { Text("返回计算器") }
-        }
     }
 }
 
@@ -204,8 +284,96 @@ private fun PlanLibrarySection(
     onOpenPlan: (SavedPlan) -> Unit,
     onAddPlanToComparison: (SavedPlan) -> Unit,
     onDeletePlan: (String) -> Unit,
+    onRenamePlan: (String, String) -> Unit,
+    onUpdatePlanNote: (String, String) -> Unit,
+    onDuplicatePlan: (SavedPlan) -> Unit,
     onBack: () -> Unit
 ) {
+    var planPendingDelete by remember { mutableStateOf<SavedPlan?>(null) }
+    var planPendingRename by remember { mutableStateOf<SavedPlan?>(null) }
+    var renameText by rememberSaveable { mutableStateOf("") }
+    var planPendingNote by remember { mutableStateOf<SavedPlan?>(null) }
+    var noteText by rememberSaveable { mutableStateOf("") }
+    planPendingRename?.let { plan ->
+        AlertDialog(
+            onDismissRequest = { planPendingRename = null },
+            title = { Text("重命名方案") },
+            text = {
+                OutlinedTextField(
+                    value = renameText,
+                    onValueChange = { renameText = it },
+                    label = { Text("方案名称") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onRenamePlan(plan.id, renameText)
+                        planPendingRename = null
+                    }
+                ) {
+                    Text("保存", fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { planPendingRename = null }) {
+                    Text("取消", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        )
+    }
+    planPendingNote?.let { plan ->
+        AlertDialog(
+            onDismissRequest = { planPendingNote = null },
+            title = { Text("方案备注") },
+            text = {
+                OutlinedTextField(
+                    value = noteText,
+                    onValueChange = { noteText = it },
+                    label = { Text("备注") },
+                    minLines = 3
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onUpdatePlanNote(plan.id, noteText)
+                        planPendingNote = null
+                    }
+                ) {
+                    Text("保存", fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { planPendingNote = null }) {
+                    Text("取消", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        )
+    }
+    planPendingDelete?.let { plan ->
+        AlertDialog(
+            onDismissRequest = { planPendingDelete = null },
+            title = { Text("删除方案") },
+            text = { Text("确认删除“${plan.name}”？") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeletePlan(plan.id)
+                        planPendingDelete = null
+                    }
+                ) {
+                    Text("删除", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { planPendingDelete = null }) {
+                    Text("取消", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        )
+    }
     if (plans.isEmpty()) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -225,9 +393,6 @@ private fun PlanLibrarySection(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
                 )
-                Button(onClick = onBack, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.small) {
-                    Text("返回计算器")
-                }
             }
         }
         return
@@ -252,6 +417,19 @@ private fun PlanLibrarySection(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Text(
+                    "保证金 ${DecimalFormatters.formatCurrency(plan.input.margin)} USDT · 杠杆 ${plan.input.leverage.stripTrailingZeros().toPlainString()}x",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (plan.note.isNotBlank()) {
+                    Text(
+                        plan.note.lineSequence().first(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { onOpenPlan(plan) }, modifier = Modifier.weight(1f), shape = MaterialTheme.shapes.small) {
                         Text("打开")
@@ -259,8 +437,25 @@ private fun PlanLibrarySection(
                     HistorySoftOutlinedButton(onClick = { onAddPlanToComparison(plan) }, modifier = Modifier.weight(1f)) {
                         Text("加入对比")
                     }
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = {
+                        renameText = plan.name
+                        planPendingRename = plan
+                    }) {
+                        Text("重命名", fontWeight = FontWeight.SemiBold)
+                    }
+                    TextButton(onClick = {
+                        noteText = plan.note
+                        planPendingNote = plan
+                    }) {
+                        Text("备注", fontWeight = FontWeight.SemiBold)
+                    }
+                    TextButton(onClick = { onDuplicatePlan(plan) }) {
+                        Text("复制", fontWeight = FontWeight.SemiBold)
+                    }
                     TextButton(
-                        onClick = { onDeletePlan(plan.id) },
+                        onClick = { planPendingDelete = plan },
                         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                     ) {
                         Text("删除", fontWeight = FontWeight.SemiBold)
@@ -269,13 +464,10 @@ private fun PlanLibrarySection(
             }
         }
     }
-    HistorySoftOutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-        Text("返回计算器")
-    }
 }
 
 @Composable
-private fun EmptyHistoryState(onBack: () -> Unit) {
+private fun EmptyHistoryState() {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.small,
@@ -294,9 +486,6 @@ private fun EmptyHistoryState(onBack: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
-            Button(onClick = onBack, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.small) {
-                Text("返回计算器")
-            }
         }
     }
 }
@@ -355,34 +544,90 @@ private fun HistoryCategoryButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Button(
-        onClick = onClick,
-        modifier = modifier.height(36.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+    Surface(
+        modifier = modifier
+            .height(34.dp)
+            .clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.small,
+        color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.50f),
+        border = BorderStroke(
+            1.dp,
+            if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.46f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)
         )
-    ) { Text(text, style = MaterialTheme.typography.labelSmall) }
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                text = text,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
 }
 
 @Composable
 private fun HistoryDetailScreen(
     record: HistoryRecord,
     onToggleFavorite: (String) -> Unit,
+    onSaveAsPlan: (HistoryRecord) -> Boolean,
     onBack: () -> Unit
 ) {
-    HistoryPageLayout(title = "历史详情", onBack = onBack, backLabel = "返回历史记录") {
+    val context = LocalContext.current
+    var showFullParams by rememberSaveable { mutableStateOf(false) }
+    HistoryPageLayout(
+        title = "历史详情",
+        onBack = onBack,
+        footer = {
+            HistorySoftOutlinedButton(
+                onClick = onBack,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("返回历史记录")
+            }
+        }
+    ) {
         Text(record.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text("${record.category.label} · ${formatTimestamp(record.savedAt)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        record.sections.forEach { section ->
-            SectionPanel(title = section.title) {
-                section.fields.forEach { field ->
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(field.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(field.value, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End, modifier = Modifier.weight(1f).padding(start = 12.dp))
+        SectionPanel(title = "结果摘要") {
+            HistoryDetailRow("净盈亏", record.summary)
+            record.roiSummary?.let { HistoryDetailRow("ROI", it) }
+            val fields = record.sections.flatMap { it.fields }.associate { it.label to it.value }
+            fields["币种"]?.let { symbol ->
+                HistoryDetailRow(
+                    "币种 / 方向 / 结算模式",
+                    listOfNotNull(symbol, fields["方向"], fields["合约模式"]).joinToString(" · ")
+                )
+            }
+            if (fields["开仓价"] != null || fields["平仓价"] != null) {
+                HistoryDetailRow("价格", "${fields["开仓价"] ?: "-"} → ${fields["平仓价"] ?: "-"}")
+            }
+        }
+        TextButton(onClick = { showFullParams = !showFullParams }, modifier = Modifier.fillMaxWidth()) {
+            Text(if (showFullParams) "收起完整记录 ▲" else "查看完整记录 ▼", fontWeight = FontWeight.SemiBold)
+        }
+        if (showFullParams) {
+            record.sections.forEach { section ->
+                SectionPanel(title = section.title) {
+                    section.fields.forEach { field ->
+                        HistoryDetailRow(field.label, field.value)
                     }
                 }
+            }
+        }
+        if (record.category == HistoryCategory.ProfitCalculation) {
+            HistorySoftOutlinedButton(
+                onClick = {
+                    val saved = onSaveAsPlan(record)
+                    Toast.makeText(
+                        context,
+                        if (saved) "已保存为方案" else "该历史缺少可保存的开仓参数",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("保存为方案")
             }
         }
         Button(onClick = { onToggleFavorite(record.id) }, modifier = Modifier.fillMaxWidth()) {
@@ -392,30 +637,46 @@ private fun HistoryDetailScreen(
 }
 
 @Composable
+private fun HistoryDetailRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End, modifier = Modifier.weight(1f).padding(start = 12.dp))
+    }
+}
+
+@Composable
 private fun HistoryPageLayout(
-    title: String,
+    title: String?,
     onBack: () -> Unit,
-    showBottomBack: Boolean = true,
-    backLabel: String = "返回计算器",
+    footer: @Composable (() -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(text = title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            content()
-            if (showBottomBack) {
+            if (title != null) {
+                Text(text = title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                content()
+            }
+            footer?.invoke()
+            if (footer == null) {
                 HistorySoftOutlinedButton(
                     onClick = onBack,
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.small
                 ) {
-                    Text(backLabel)
+                    Text("返回计算器")
                 }
             }
         }

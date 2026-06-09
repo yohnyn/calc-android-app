@@ -47,9 +47,12 @@ fun MainResultDialog(
     input: CalculationInput,
     result: CalculationResult,
     symbol: String,
+    onShowFeeSettings: () -> Unit,
     onDismiss: () -> Unit
 ) {
     var showInputDetails by rememberSaveable { mutableStateOf(false) }
+    var showFeeBreakdown by rememberSaveable { mutableStateOf(false) }
+    var showFormula by rememberSaveable { mutableStateOf(false) }
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier.fillMaxWidth().widthIn(max = 400.dp).heightIn(max = 660.dp),
@@ -61,8 +64,48 @@ fun MainResultDialog(
                 modifier = Modifier.padding(12.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("计算结果", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("交易预览", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 MainOrderedResultSection(input = input, result = result)
+                SectionPanel(
+                    title = "费用明细",
+                    trailing = {
+                        TextButton(onClick = onShowFeeSettings) {
+                            Text("设置", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                ) {
+                    MetricTile(
+                        label = "交易费用约",
+                        value = "${DecimalFormatters.formatCurrency(result.totalFee ?: result.openFee)} USDT"
+                    )
+                    TextButton(
+                        onClick = { showFeeBreakdown = !showFeeBreakdown },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            if (showFeeBreakdown) "收起费用明细 ▲" else "查看费用明细 ▼",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    if (showFeeBreakdown) {
+                        ResultInputRow {
+                            MetricTile(
+                                label = "开仓手续费",
+                                value = "${DecimalFormatters.formatCurrency(result.openFee)} USDT",
+                                modifier = Modifier.weight(1f)
+                            )
+                            MetricTile(
+                                label = "平仓手续费",
+                                value = "${DecimalFormatters.formatCurrency(result.closeFee)} USDT",
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        MetricTile(
+                            label = "手续费率",
+                            value = "${input.openFeeRatePercent.stripTrailingZeros().toPlainString()}% / ${input.closeFeeRatePercent.stripTrailingZeros().toPlainString()}%"
+                        )
+                    }
+                }
                 TextButton(
                     onClick = { showInputDetails = !showInputDetails },
                     modifier = Modifier.fillMaxWidth()
@@ -74,6 +117,27 @@ fun MainResultDialog(
                 }
                 if (showInputDetails) {
                     CalculationInputDetails(input = input, symbol = symbol, settlementMode = SettlementMode.UsdtMargined)
+                }
+                TextButton(
+                    onClick = { showFormula = !showFormula },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        if (showFormula) "收起计算公式 ▲" else "查看计算公式 ▼",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                if (showFormula) {
+                    SectionPanel(title = "计算公式") {
+                        MetricTile(
+                            label = "净盈亏",
+                            value = "未扣手续费盈亏 - 交易费用约"
+                        )
+                        MetricTile(
+                            label = "ROI",
+                            value = "净盈亏 / 所需保证金 × 100%"
+                        )
+                    }
                 }
                 Button(
                     onClick = onDismiss,
@@ -131,10 +195,7 @@ fun CoinMarginedResultDialog(
 private fun MainOrderedResultSection(input: CalculationInput, result: CalculationResult) {
     val palette = LocalProfitLossPalette.current
     val hasTargetStop = input.takeProfitPrice != null || input.stopLossPrice != null
-    val leadValue = when {
-        hasTargetStop && result.takeProfitNetPnl != null -> result.takeProfitNetPnl
-        else -> result.netPnl
-    }
+    val leadValue = result.netPnl
     val accent = if (leadValue == null || leadValue >= BigDecimal.ZERO) palette.profit else palette.loss
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -144,27 +205,64 @@ private fun MainOrderedResultSection(input: CalculationInput, result: Calculatio
     ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (hasTargetStop) {
+                result.netPnl?.let {
+                    ResultPrimaryMetric("净盈亏", "${DecimalFormatters.formatPositiveNegative(it)} USDT", pnlColor(it))
+                }
+                ResultMiniMetric(
+                    label = "ROI",
+                    value = pnlText(result.roiPercent, DecimalFormatters.formatPercentage(result.roiPercent)),
+                    color = pnlColor(result.netPnl)
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    MetricTile(
+                        label = "未扣手续费盈亏",
+                        value = "${DecimalFormatters.formatPositiveNegative(result.grossPnl)} USDT",
+                        modifier = Modifier.weight(1f)
+                    )
+                    MetricTile(
+                        label = "交易费用约",
+                        value = "${DecimalFormatters.formatCurrency(result.totalFee ?: result.openFee)} USDT",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
                 result.takeProfitNetPnl?.let {
                     ResultPrimaryMetric("止盈收益", "${DecimalFormatters.formatPositiveNegative(it)} USDT", palette.profit)
                 }
                 result.stopLossNetPnl?.let {
                     ResultPrimaryMetric("止损亏损", "${DecimalFormatters.formatPositiveNegative(it)} USDT", palette.loss)
                 }
-                result.netPnl?.let {
-                    ResultPrimaryMetric("当前平仓价收益", "${DecimalFormatters.formatPositiveNegative(it)} USDT", pnlColor(it))
-                }
             } else {
                 ResultPrimaryMetric(
-                    label = "预计收益",
+                    label = "净盈亏",
                     value = "${DecimalFormatters.formatPositiveNegative(result.netPnl)} USDT",
                     color = pnlColor(result.netPnl)
                 )
             }
-            ResultMiniMetric(
-                label = "收益率",
-                value = pnlText(result.roiPercent, DecimalFormatters.formatPercentage(result.roiPercent)),
-                color = pnlColor(result.netPnl)
-            )
+            if (!hasTargetStop) {
+                ResultMiniMetric(
+                    label = "ROI",
+                    value = pnlText(result.roiPercent, DecimalFormatters.formatPercentage(result.roiPercent)),
+                    color = pnlColor(result.netPnl)
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    MetricTile(
+                        label = "未扣手续费盈亏",
+                        value = "${DecimalFormatters.formatPositiveNegative(result.grossPnl)} USDT",
+                        modifier = Modifier.weight(1f)
+                    )
+                    MetricTile(
+                        label = "交易费用约",
+                        value = "${DecimalFormatters.formatCurrency(result.totalFee ?: result.openFee)} USDT",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
             if (input.estimateLiquidation) {
                 result.liquidationPrice?.let {
                     MetricTile(
@@ -181,10 +279,6 @@ private fun MainOrderedResultSection(input: CalculationInput, result: Calculatio
                     )
                 }
             }
-            MetricTile(
-                label = "手续费",
-                value = "${DecimalFormatters.formatCurrency(result.totalFee ?: result.openFee)} USDT"
-            )
         }
     }
 }
@@ -248,7 +342,7 @@ private fun MainRiskCostSection(result: CalculationResult) {
         }
         result.distanceToLiquidationPercent?.let {
             MetricTile(
-                label = "距离强平价",
+                label = "距离强平",
                 value = DecimalFormatters.formatPercentage(it),
                 valueColor = WarningAmber
             )
@@ -405,7 +499,7 @@ private fun CalculationInputDetails(
         }
         if (input.marginMode == MarginMode.Cross) {
             MetricTile(
-                label = "账户总资金",
+                label = "账户总资产",
                 value = input.totalFunds?.let { "${DecimalFormatters.formatCurrency(it)} USDT" } ?: "未填写"
             )
         }
@@ -436,7 +530,7 @@ fun CompactExpandableResultCard(
                 Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = valueColor)
             }
             Text(
-                "展开",
+                "查看详情",
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -486,7 +580,7 @@ fun ResultCard(
                 ) {
                     Text(
                         text = when {
-                            netPnl == null && hasTargetOrStop -> "计算结果"
+                            netPnl == null && hasTargetOrStop -> "交易预览"
                             netPnl == null -> "等待盈利或亏损结果"
                             isProfit -> "净盈利"
                             else -> "净亏损"
@@ -535,19 +629,19 @@ fun ResultCard(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 MetricTile(
-                    label = "开仓手续费约",
+                    label = "开仓手续费估算",
                     value = "${DecimalFormatters.formatCurrency(result.openFee)} USDT",
                     modifier = Modifier.weight(1f)
                 )
                 MetricTile(
-                    label = "平仓手续费约",
+                    label = "平仓手续费估算",
                     value = "${DecimalFormatters.formatCurrency(result.closeFee)} USDT",
                     modifier = Modifier.weight(1f)
                 )
             }
             result.distanceToLiquidationPercent?.let {
                 MetricTile(
-                    label = "距离估算强平价",
+                    label = "距离强平",
                     value = DecimalFormatters.formatPercentage(it),
                     valueColor = WarningAmber
                 )

@@ -43,7 +43,7 @@ fun createProfitHistorySnapshot(
         )),
         HistorySection("保存时结果", buildList {
             add(HistoryField("仓位价值", "${DecimalFormatters.formatCurrency(result.positionValue)} USDT"))
-            add(HistoryField("总手续费约", "${DecimalFormatters.formatCurrency(result.totalFee)} USDT"))
+            add(HistoryField("手续费估算", "${DecimalFormatters.formatCurrency(result.totalFee)} USDT"))
             add(HistoryField("净盈亏", "${DecimalFormatters.formatPositiveNegative(result.netPnl)} USDT"))
             add(HistoryField("ROI", DecimalFormatters.formatPercentage(result.roiPercent)))
             if (input.estimateLiquidation && result.liquidationPrice != null) {
@@ -66,7 +66,7 @@ fun createAveragingHistorySnapshot(
     roiSummary = null,
     savedAt = System.currentTimeMillis(),
     sections = listOf(
-        HistorySection("补仓参数", listOf(
+        HistorySection("详细数据", listOf(
             HistoryField("方向", input.side.label()),
             HistoryField("当前均价", "${DecimalFormatters.formatCurrency(input.currentEntryPrice)} USDT"),
             HistoryField("当前数量", "${DecimalFormatters.formatQuantity(input.currentQuantity)} $symbol"),

@@ -16,7 +16,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -40,6 +39,7 @@ import com.personal.futurescalculator.model.ThemeMode
 import com.personal.futurescalculator.ui.SectionPanel
 import com.personal.futurescalculator.ui.staticpages.AboutScreen
 import com.personal.futurescalculator.ui.staticpages.DisclaimerScreen
+import com.personal.futurescalculator.ui.staticpages.DonationScreen
 import com.personal.futurescalculator.ui.staticpages.FeedbackScreen
 import com.personal.futurescalculator.ui.staticpages.PrivacyPolicyScreen
 import com.personal.futurescalculator.ui.theme.LossRed
@@ -81,6 +81,7 @@ fun SettingsScreen(
         )
         SettingsPage.Privacy -> PrivacyPolicyScreen(onBack = { page = SettingsPage.Main })
         SettingsPage.Disclaimer -> DisclaimerScreen(onBack = { page = SettingsPage.Main })
+        SettingsPage.SupportAuthor -> DonationScreen(onBack = { page = SettingsPage.Main })
         SettingsPage.AppTheme -> AppThemeScreen(
             themeMode = themeMode,
             onThemeModeChange = onThemeModeChange,
@@ -114,6 +115,7 @@ private enum class SettingsPage {
     About,
     Privacy,
     Disclaimer,
+    SupportAuthor,
     AppTheme,
     CoinMarginedMode,
     PnlColor,
@@ -158,6 +160,7 @@ private fun SettingsHome(
                 SettingsMenuButton("关于App") { onOpenPage(SettingsPage.About) }
                 SettingsMenuButton("隐私政策") { onOpenPage(SettingsPage.Privacy) }
                 SettingsMenuButton("免责声明") { onOpenPage(SettingsPage.Disclaimer) }
+                SettingsMenuButton("支持作者") { onOpenPage(SettingsPage.SupportAuthor) }
             }
             SettingsSoftOutlinedButton(
                 onClick = onBack,
@@ -252,8 +255,9 @@ private fun CopyFormatSettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                CopyFormatButton("摘要版", CopyFormat.Summary, format, onFormatChange, Modifier.weight(1f))
-                CopyFormatButton("详细版", CopyFormat.Detail, format, onFormatChange, Modifier.weight(1f))
+                CopyFormatButton(CopyFormat.Ask.label, CopyFormat.Ask, format, onFormatChange, Modifier.weight(1f))
+                CopyFormatButton(CopyFormat.Summary.label, CopyFormat.Summary, format, onFormatChange, Modifier.weight(1f))
+                CopyFormatButton(CopyFormat.Detail.label, CopyFormat.Detail, format, onFormatChange, Modifier.weight(1f))
             }
         }
     }
@@ -267,6 +271,12 @@ private fun CoinMarginedModeSettingsScreen(
 ) {
     SettingsPageLayout(title = "币本位计算方式", onBack = onBack) {
         SectionPanel(title = "计算模式") {
+            Text(
+                text = "当前：${mode.label}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary
+            )
             Text(
                 text = "币本位支持按持仓币数量计算，也支持反向合约公式。设置会保存在本地。",
                 style = MaterialTheme.typography.bodyMedium,
@@ -289,11 +299,10 @@ private fun CoinMarginedModeSettingsScreen(
 @Composable
 fun CoinMarginedModeDialog(
     initialMode: CoinMarginedCalculationMode,
-    onConfirm: (CoinMarginedCalculationMode, Boolean) -> Unit,
+    onConfirm: (CoinMarginedCalculationMode) -> Unit,
     onDismiss: () -> Unit
 ) {
     var selectedMode by rememberSaveable { mutableStateOf(initialMode) }
-    var rememberChoice by rememberSaveable { mutableStateOf(true) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -301,7 +310,7 @@ fun CoinMarginedModeDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "首次切换到币本位时请选择计算方式，之后也可在设置中修改。",
+                    text = "首次切换到币本位时请选择计算方式，之后可在设置中修改。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -315,23 +324,16 @@ fun CoinMarginedModeDialog(
                     selectedMode = selectedMode,
                     onSelect = { selectedMode = it }
                 )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Checkbox(checked = rememberChoice, onCheckedChange = { rememberChoice = it })
-                    Text("记住选择，下次不再提示")
-                }
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(selectedMode, rememberChoice) }) {
+            Button(onClick = { onConfirm(selectedMode) }) {
                 Text("确认")
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("稍后再选")
+                Text("取消")
             }
         }
     )

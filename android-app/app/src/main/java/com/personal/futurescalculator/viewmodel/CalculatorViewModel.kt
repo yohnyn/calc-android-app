@@ -30,6 +30,8 @@ import com.personal.futurescalculator.model.SavedPlan
 import com.personal.futurescalculator.model.ThemeMode
 import com.personal.futurescalculator.model.HistoryRecord
 import com.personal.futurescalculator.model.HistoryCategory
+import com.personal.futurescalculator.model.MarginMode
+import com.personal.futurescalculator.model.PositionSide
 import com.personal.futurescalculator.model.toComparisonItem
 import com.personal.futurescalculator.model.toSavedPlan
 import java.math.BigDecimal
@@ -163,11 +165,16 @@ class CalculatorViewModel(context: Context) : ViewModel() {
 
     fun saveComparisonItem(item: ComparisonItem) {
         viewModelScope.launch {
-            val items = _uiState.value.comparisonItems
-            val updated = if (items.any { it.id == item.id }) {
-                items.map { if (it.id == item.id) item else it }
+            val normalizedItem = if (item.settlementMode == SettlementMode.CoinMargined) {
+                item.copy(coinMarginedCalculationMode = _uiState.value.coinMarginedCalculationMode)
             } else {
-                items + item
+                item
+            }
+            val items = _uiState.value.comparisonItems
+            val updated = if (items.any { it.id == normalizedItem.id }) {
+                items.map { if (it.id == normalizedItem.id) normalizedItem else it }
+            } else {
+                items + normalizedItem
             }
             _uiState.value = _uiState.value.copy(comparisonItems = updated)
             calculateComparisonResults()
@@ -234,17 +241,20 @@ class CalculatorViewModel(context: Context) : ViewModel() {
         updateSettlementMode(mode)
     }
 
-    fun onCoinMarginedModeSelected(mode: CoinMarginedCalculationMode, remember: Boolean) {
-        if (remember) {
-            uiPreferencesRepository.saveCoinMarginedCalculationMode(mode)
-            uiPreferencesRepository.saveHasSeenCoinMarginedModeDialog(true)
-        }
+    fun onCoinMarginedModeSelected(mode: CoinMarginedCalculationMode) {
+        uiPreferencesRepository.saveCoinMarginedCalculationMode(mode)
+        uiPreferencesRepository.saveHasSeenCoinMarginedModeDialog(true)
         _uiState.value = _uiState.value.copy(
             coinMarginedCalculationMode = mode,
-            hasSeenCoinMarginedModeDialog = _uiState.value.hasSeenCoinMarginedModeDialog || remember,
+            hasSeenCoinMarginedModeDialog = true,
+            input = normalizeAmountFields(_uiState.value.input, AmountField.Quantity),
+            lastEditedAmountField = AmountField.Quantity,
+            settlementMode = SettlementMode.CoinMargined,
             showCoinMarginedModeDialog = false
         )
         calculateCoinMarginedResult()
+        calculateResult()
+        calculateComparisonResults()
     }
 
     fun dismissCoinMarginedModeDialog() {
@@ -301,12 +311,53 @@ class CalculatorViewModel(context: Context) : ViewModel() {
         _uiState.value = _uiState.value.copy(savedPlans = updated)
     }
 
+    fun renameSavedPlan(id: String, name: String) {
+        val resolvedName = name.trim().ifBlank { "未命名方案" }
+        val updated = _uiState.value.savedPlans.map { plan ->
+            if (plan.id == id) plan.copy(name = resolvedName, updatedAt = System.currentTimeMillis()) else plan
+        }
+        planRepository.save(updated)
+        _uiState.value = _uiState.value.copy(savedPlans = updated)
+    }
+
+    fun updateSavedPlanNote(id: String, note: String) {
+        val updated = _uiState.value.savedPlans.map { plan ->
+            if (plan.id == id) plan.copy(note = note.trim(), updatedAt = System.currentTimeMillis()) else plan
+        }
+        planRepository.save(updated)
+        _uiState.value = _uiState.value.copy(savedPlans = updated)
+    }
+
+    fun duplicateSavedPlan(plan: SavedPlan) {
+        val now = System.currentTimeMillis()
+        val copy = plan.copy(
+            id = "plan_$now",
+            name = duplicatePlanName(plan.name),
+            createdAt = now,
+            updatedAt = now
+        )
+        val updated = listOf(copy) + _uiState.value.savedPlans
+        planRepository.save(updated)
+        _uiState.value = _uiState.value.copy(savedPlans = updated)
+    }
+
+    fun saveHistoryAsPlan(record: HistoryRecord): Boolean {
+        val plan = record.toSavedPlanFromHistory(_uiState.value.coins, _uiState.value.coinMarginedCalculationMode)
+            ?: return false
+        val updated = listOf(plan) + _uiState.value.savedPlans
+        planRepository.save(updated)
+        _uiState.value = _uiState.value.copy(savedPlans = updated)
+        return true
+    }
+
     fun openSavedPlan(plan: SavedPlan) {
         _uiState.value = _uiState.value.copy(
-            input = normalizeAmountFields(plan.input, plan.lastEditedAmountField),
+            input = normalizeAmountFields(
+                plan.input.copy(totalFunds = null, estimateLiquidation = false),
+                plan.lastEditedAmountField
+            ),
             selectedCoinId = plan.coinId,
             settlementMode = plan.settlementMode,
-            coinMarginedCalculationMode = plan.coinMarginedCalculationMode,
             lastEditedAmountField = plan.lastEditedAmountField
         )
         coinRepository.saveSelectedCoin(plan.coinId)
@@ -317,7 +368,10 @@ class CalculatorViewModel(context: Context) : ViewModel() {
     }
 
     fun addSavedPlanToComparison(plan: SavedPlan) {
-        val item = plan.toComparisonItem().copy(id = "item_${System.currentTimeMillis()}")
+        val item = plan.toComparisonItem().copy(
+            id = "item_${System.currentTimeMillis()}",
+            coinMarginedCalculationMode = _uiState.value.coinMarginedCalculationMode
+        )
         val updated = _uiState.value.comparisonItems + item
         _uiState.value = _uiState.value.copy(comparisonItems = updated)
         calculateComparisonResults()
@@ -329,15 +383,19 @@ class CalculatorViewModel(context: Context) : ViewModel() {
         } else {
             AmountField.Quantity
         }
-        val shouldShowCoinMarginedModeDialog =
+        if (
             mode == SettlementMode.CoinMargined &&
-                _uiState.value.settlementMode != SettlementMode.CoinMargined &&
-                !_uiState.value.hasSeenCoinMarginedModeDialog
+            _uiState.value.settlementMode != SettlementMode.CoinMargined &&
+            !_uiState.value.hasSeenCoinMarginedModeDialog
+        ) {
+            _uiState.value = _uiState.value.copy(showCoinMarginedModeDialog = true)
+            return
+        }
         _uiState.value = _uiState.value.copy(
             settlementMode = mode,
             input = normalizeAmountFields(_uiState.value.input, source),
             lastEditedAmountField = source,
-            showCoinMarginedModeDialog = shouldShowCoinMarginedModeDialog
+            showCoinMarginedModeDialog = false
         )
         calculateResult()
         calculateComparisonResults()
@@ -418,9 +476,9 @@ class CalculatorViewModel(context: Context) : ViewModel() {
             current = currentResult,
             currentCoinMargined = currentCoinMarginedResult,
             currentSettlementMode = _uiState.value.settlementMode,
+            coinMarginedCalculationMode = _uiState.value.coinMarginedCalculationMode,
             items = comparisonItems,
-            coinPricesById = _uiState.value.coins.associate { it.id to it.priceUsdt },
-            totalFundsForCrossLiquidation = currentInput.totalFunds
+            coinPricesById = _uiState.value.coins.associate { it.id to it.priceUsdt }
         )
         _uiState.value = _uiState.value.copy(comparisonResults = comparisonResults)
     }
@@ -523,4 +581,56 @@ internal fun normalizeAmountFields(input: CalculationInput, source: AmountField)
             )
         }
     }
+}
+
+private fun duplicatePlanName(name: String): String =
+    if (name.contains("副本")) "$name 2" else "$name 副本"
+
+private fun HistoryRecord.toSavedPlanFromHistory(
+    coins: List<CoinAsset>,
+    coinMarginedCalculationMode: CoinMarginedCalculationMode
+): SavedPlan? {
+    if (category != HistoryCategory.ProfitCalculation) return null
+    val fields = sections.flatMap { it.fields }.associate { it.label to it.value }
+    val symbol = fields["币种"] ?: return null
+    val coinId = coins.firstOrNull { it.symbol.equals(symbol, ignoreCase = true) }?.id
+        ?: coins.firstOrNull()?.id
+        ?: return null
+    val now = System.currentTimeMillis()
+    val input = CalculationInput(
+        side = if (fields["方向"] == "做空") PositionSide.Short else PositionSide.Long,
+        marginMode = if (fields["保证金模式"] == "逐仓") MarginMode.Isolated else MarginMode.Cross,
+        leverage = fields["杠杆"].toDecimalOrNull() ?: BigDecimal.ONE,
+        margin = fields["保证金"].toDecimalOrNull(),
+        quantity = fields["数量"].toDecimalOrNull(),
+        entryPrice = fields["开仓价"].toDecimalOrNull(),
+        exitPrice = fields["平仓价"].toDecimalOrNull(),
+        openFeeRatePercent = fields["开仓费率"].toDecimalOrNull() ?: BigDecimal("0.05"),
+        closeFeeRatePercent = fields["平仓费率"].toDecimalOrNull() ?: BigDecimal("0.05"),
+        maintenanceMarginRatePercent = fields["维持保证金率"].toDecimalOrNull() ?: BigDecimal("0.5")
+    )
+    if (input.entryPrice == null || input.exitPrice == null || (input.margin == null && input.quantity == null)) {
+        return null
+    }
+    return SavedPlan(
+        id = "plan_$now",
+        name = "${symbol} 历史方案",
+        coinId = coinId,
+        settlementMode = if (fields["合约模式"] == "币本位") SettlementMode.CoinMargined else SettlementMode.UsdtMargined,
+        coinMarginedCalculationMode = coinMarginedCalculationMode,
+        input = input,
+        lastEditedAmountField = if (input.margin != null) AmountField.Margin else AmountField.Quantity,
+        note = "来自历史记录：${title}",
+        createdAt = now,
+        updatedAt = now
+    )
+}
+
+private fun String?.toDecimalOrNull(): BigDecimal? {
+    val cleaned = this
+        ?.replace(",", "")
+        ?.replace(Regex("[^0-9.\\-]"), "")
+        ?.takeIf { it.isNotBlank() && it != "-" && it != "." }
+        ?: return null
+    return runCatching { BigDecimal(cleaned) }.getOrNull()
 }

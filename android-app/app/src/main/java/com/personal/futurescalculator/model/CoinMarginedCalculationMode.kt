@@ -5,11 +5,11 @@ enum class CoinMarginedCalculationMode(
     val shortDescription: String
 ) {
     CoinQuantity(
-        label = "币数量模式",
-        shortDescription = "按照持仓币数量计算盈亏，适合大多数普通用户。"
+        label = "按币数量",
+        shortDescription = "直接输入持仓币数量，适合大多数场景。"
     ),
     InverseContract(
-        label = "反向合约模式",
-        shortDescription = "采用传统 Inverse Contract（反向合约）计算方式。"
+        label = "按合约张数",
+        shortDescription = "按反向合约张数计算，适合按张数记录仓位的用户。"
     )
 }

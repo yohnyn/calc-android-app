@@ -7,5 +7,6 @@ data class ComparisonItem(
     val settlementMode: SettlementMode = SettlementMode.UsdtMargined,
     val coinMarginedCalculationMode: CoinMarginedCalculationMode = CoinMarginedCalculationMode.CoinQuantity,
     val input: CalculationInput = CalculationInput(),
-    val lastEditedAmountField: AmountField = AmountField.Margin
+    val lastEditedAmountField: AmountField = AmountField.Margin,
+    val note: String = ""
 )

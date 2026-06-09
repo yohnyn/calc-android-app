@@ -52,6 +52,7 @@ import com.personal.futurescalculator.model.CoinMarginedCalculationMode
 import com.personal.futurescalculator.model.CoinMarginedResult
 import com.personal.futurescalculator.model.ComparisonItem
 import com.personal.futurescalculator.model.ComparisonResult
+import com.personal.futurescalculator.model.CopyFormat
 import com.personal.futurescalculator.model.HistoryCategory
 import com.personal.futurescalculator.model.HistoryField
 import com.personal.futurescalculator.model.HistoryRecord
@@ -166,7 +167,8 @@ fun selectedComparisonValidationMessage(schemes: List<ComparisonSchemeView>): St
 @Composable
 fun CopySchemeDialog(
     schemes: List<ComparisonSchemeView>,
-    onSelect: (ComparisonSchemeView) -> Unit,
+    copyFormat: CopyFormat,
+    onSelect: (ComparisonSchemeView, CopyFormat) -> Unit,
     onDismiss: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
@@ -186,7 +188,9 @@ fun CopySchemeDialog(
                 )
                 schemes.forEach { scheme ->
                     Surface(
-                        modifier = Modifier.fillMaxWidth().clickable { onSelect(scheme) },
+                        modifier = Modifier.fillMaxWidth().clickable(enabled = copyFormat != CopyFormat.Ask) {
+                            onSelect(scheme, copyFormat)
+                        },
                         shape = MaterialTheme.shapes.small,
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
@@ -205,7 +209,18 @@ fun CopySchemeDialog(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Text("复制", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                            if (copyFormat == CopyFormat.Ask) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    TextButton(onClick = { onSelect(scheme, CopyFormat.Summary) }) {
+                                        Text("简洁", fontWeight = FontWeight.SemiBold)
+                                    }
+                                    TextButton(onClick = { onSelect(scheme, CopyFormat.Detail) }) {
+                                        Text("详细", fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                            } else {
+                                Text("复制", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                            }
                         }
                     }
                 }
@@ -220,6 +235,7 @@ fun CopySchemeDialog(
 @Composable
 fun ComparisonResultDialog(
     schemes: List<ComparisonSchemeView>,
+    onCopySummary: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val orderedSchemes = schemes.filter { it.comparablePnlUsdt() != null }
@@ -237,7 +253,7 @@ fun ComparisonResultDialog(
                 modifier = Modifier.padding(12.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("方案对比", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("开仓方案对比", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 if (mainScheme != null && comparedSchemes.isNotEmpty()) {
                     Text("相对主方案差值列表", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     comparedSchemes.forEach { scheme ->
@@ -278,6 +294,13 @@ fun ComparisonResultDialog(
                             }
                         }
                     }
+                }
+                OutlinedButton(
+                    onClick = onCopySummary,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.small
+                ) {
+                    Text("复制对比摘要")
                 }
                 Button(
                     onClick = onDismiss,
@@ -416,23 +439,13 @@ fun ComparisonSchemeEditorDialog(
                                 Text("${coin?.symbol ?: "币"} ▼")
                             }
                         }
-                        ComparisonDropdownSelector(
-                            text = "${settlementModeLabel(item.settlementMode)} ▼",
+                        ComparisonOptionChips(
+                            firstText = "U 本位",
+                            secondText = "币本位",
+                            firstSelected = item.settlementMode == SettlementMode.UsdtMargined,
+                            onFirstClick = { item = item.copy(settlementMode = SettlementMode.UsdtMargined) },
+                            onSecondClick = { item = item.copy(settlementMode = SettlementMode.CoinMargined) },
                             modifier = Modifier.weight(1f),
-                            options = listOf(
-                                "U 本位" to { item = item.copy(settlementMode = SettlementMode.UsdtMargined) },
-                                "币本位" to { item = item.copy(settlementMode = SettlementMode.CoinMargined) }
-                            )
-                        )
-                    }
-                    if (item.settlementMode == SettlementMode.CoinMargined) {
-                        ComparisonDropdownSelector(
-                            text = "${coinMarginedCalculationModeShortLabel(item.coinMarginedCalculationMode)}模式 ▼",
-                            modifier = Modifier.fillMaxWidth(),
-                            options = listOf(
-                                "币数量模式" to { item = item.copy(coinMarginedCalculationMode = CoinMarginedCalculationMode.CoinQuantity) },
-                                "反向合约模式" to { item = item.copy(coinMarginedCalculationMode = CoinMarginedCalculationMode.InverseContract) }
-                            )
                         )
                     }
                     PositionSideSelector(item.input.side, { item = item.copy(input = item.input.copy(side = it)) })
@@ -496,6 +509,7 @@ fun ComparisonSchemeEditorDialog(
 fun PlanSelectionDialog(
     plans: List<SavedPlan>,
     coins: List<CoinAsset>,
+    coinMarginedCalculationMode: CoinMarginedCalculationMode,
     onSelect: (ComparisonItem) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -524,7 +538,8 @@ fun PlanSelectionDialog(
                             onSelect(
                                 plan.toComparisonItem().copy(
                                     id = "item_${System.currentTimeMillis()}",
-                                    name = plan.name
+                                    name = plan.name,
+                                    coinMarginedCalculationMode = coinMarginedCalculationMode
                                 )
                             )
                         },
@@ -566,22 +581,24 @@ fun createComparisonHistorySnapshot(schemes: List<ComparisonSchemeView>): Histor
         roiSummary = null,
         savedAt = System.currentTimeMillis(),
         sections = schemes.map { scheme ->
-            HistorySection("${scheme.name} · ${scheme.symbol}", listOf(
-                HistoryField("结算模式", comparisonSettlementHistoryDisplay(scheme.settlementMode, scheme.coinMarginedCalculationMode)),
-                HistoryField("币本位计算方式", if (scheme.settlementMode == SettlementMode.CoinMargined) scheme.coinMarginedCalculationMode.label else "不适用"),
-                HistoryField("方向", scheme.input.side.label()),
-                HistoryField("模式", scheme.input.marginMode.label()),
-                HistoryField("杠杆", "${scheme.input.leverage.stripTrailingZeros().toPlainString()}x"),
-                HistoryField("保证金", "${DecimalFormatters.formatCurrency(scheme.result?.requiredMargin)} USDT"),
-                HistoryField("数量", "${DecimalFormatters.formatQuantity(scheme.result?.quantity)} ${scheme.symbol}"),
-                HistoryField("开仓价", "${DecimalFormatters.formatCurrency(scheme.input.entryPrice)} USDT"),
-                HistoryField("平仓价", "${DecimalFormatters.formatCurrency(scheme.input.exitPrice)} USDT"),
-                HistoryField(scheme.primaryPnlLabel(), scheme.primaryPnlText()),
-                HistoryField("折算收益", "${DecimalFormatters.formatPositiveNegative(scheme.comparablePnlUsdt())} USDT"),
-                HistoryField("ROI", if (scheme.settlementMode == SettlementMode.UsdtMargined) DecimalFormatters.formatPercentage(scheme.result?.roiPercent) else "不适用"),
-                HistoryField("手续费", if (scheme.settlementMode == SettlementMode.UsdtMargined) "${DecimalFormatters.formatCurrency(scheme.result?.totalFee)} USDT" else "不适用"),
-                HistoryField("强平价", scheme.result?.liquidationPrice?.let { "${DecimalFormatters.formatCurrency(it)} USDT" } ?: "无法可靠估算")
-            ))
+            val fields = buildList {
+                add(HistoryField("结算模式", comparisonSettlementHistoryDisplay(scheme.settlementMode, scheme.coinMarginedCalculationMode)))
+                add(HistoryField("方向", scheme.input.side.label()))
+                add(HistoryField("模式", scheme.input.marginMode.label()))
+                add(HistoryField("杠杆", "${scheme.input.leverage.stripTrailingZeros().toPlainString()}x"))
+                add(HistoryField("保证金", "${DecimalFormatters.formatCurrency(scheme.result?.requiredMargin)} USDT"))
+                add(HistoryField("数量", "${DecimalFormatters.formatQuantity(scheme.result?.quantity)} ${scheme.symbol}"))
+                add(HistoryField("开仓价", "${DecimalFormatters.formatCurrency(scheme.input.entryPrice)} USDT"))
+                add(HistoryField("平仓价", "${DecimalFormatters.formatCurrency(scheme.input.exitPrice)} USDT"))
+                add(HistoryField(scheme.primaryPnlLabel(), scheme.primaryPnlText()))
+                add(HistoryField("折算收益", "${DecimalFormatters.formatPositiveNegative(scheme.comparablePnlUsdt())} USDT"))
+                add(HistoryField("ROI", if (scheme.settlementMode == SettlementMode.UsdtMargined) DecimalFormatters.formatPercentage(scheme.result?.roiPercent) else "不适用"))
+                add(HistoryField("手续费", if (scheme.settlementMode == SettlementMode.UsdtMargined) "${DecimalFormatters.formatCurrency(scheme.result?.totalFee)} USDT" else "不适用"))
+                if (scheme.input.estimateLiquidation && scheme.result?.liquidationPrice != null) {
+                    add(HistoryField("估算强平价", "${DecimalFormatters.formatCurrency(scheme.result.liquidationPrice)} USDT"))
+                }
+            }
+            HistorySection("${scheme.name} · ${scheme.symbol}", fields)
         } + HistorySection("收益差距", differences.ifEmpty { listOf(HistoryField("收益差距", "暂无")) })
     )
 }
@@ -767,6 +784,60 @@ private fun ComparisonDropdownSelector(
                     }
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun ComparisonOptionChips(
+    firstText: String,
+    secondText: String,
+    firstSelected: Boolean,
+    onFirstClick: () -> Unit,
+    onSecondClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        ComparisonOptionChip(
+            text = firstText,
+            selected = firstSelected,
+            onClick = onFirstClick,
+            modifier = Modifier.weight(1f)
+        )
+        ComparisonOptionChip(
+            text = secondText,
+            selected = !firstSelected,
+            onClick = onSecondClick,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun ComparisonOptionChip(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.height(34.dp).clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.small,
+        color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.50f),
+        border = BorderStroke(
+            1.dp,
+            if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.46f)
+            else MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)
+        )
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -982,7 +1053,7 @@ private fun ComparisonSchemeSummary(scheme: ComparisonSchemeView) {
                             modifier = Modifier.weight(1f)
                         )
                         MetricTile(
-                            label = "总手续费约",
+                            label = "手续费估算",
                             value = "${DecimalFormatters.formatCurrency(scheme.result?.totalFee)} USDT",
                             modifier = Modifier.weight(1f)
                         )
@@ -1007,11 +1078,14 @@ private fun ComparisonSchemeSummary(scheme: ComparisonSchemeView) {
                         valueColor = pnlColor(scheme.result?.grossPnl)
                     )
                 }
-                MetricTile(
-                    label = "估算强平价",
-                    value = comparisonLiquidationPrice(scheme.input, scheme.result)?.let { "${DecimalFormatters.formatCurrency(it)} USDT" }
-                        ?: "无法可靠估算"
-                )
+                if (scheme.input.estimateLiquidation) {
+                    comparisonLiquidationPrice(scheme.input, scheme.result)?.let {
+                        MetricTile(
+                            label = "估算强平价",
+                            value = "${DecimalFormatters.formatCurrency(it)} USDT"
+                        )
+                    }
+                }
             }
         }
     }
@@ -1162,17 +1236,12 @@ private fun settlementModeLabel(mode: SettlementMode): String = when (mode) {
     SettlementMode.CoinMargined -> "币本位"
 }
 
-private fun coinMarginedCalculationModeShortLabel(mode: CoinMarginedCalculationMode): String = when (mode) {
-    CoinMarginedCalculationMode.CoinQuantity -> "币数量"
-    CoinMarginedCalculationMode.InverseContract -> "反向合约"
-}
-
 private fun comparisonSettlementDisplay(
     settlementMode: SettlementMode,
     coinMarginedCalculationMode: CoinMarginedCalculationMode
 ): String = when (settlementMode) {
     SettlementMode.UsdtMargined -> settlementModeLabel(settlementMode)
-    SettlementMode.CoinMargined -> "${settlementModeLabel(settlementMode)}(${coinMarginedCalculationModeShortLabel(coinMarginedCalculationMode)})"
+    SettlementMode.CoinMargined -> settlementModeLabel(settlementMode)
 }
 
 private fun comparisonSettlementHistoryDisplay(
@@ -1180,7 +1249,7 @@ private fun comparisonSettlementHistoryDisplay(
     coinMarginedCalculationMode: CoinMarginedCalculationMode
 ): String = when (settlementMode) {
     SettlementMode.UsdtMargined -> settlementModeLabel(settlementMode)
-    SettlementMode.CoinMargined -> "${settlementModeLabel(settlementMode)}（${coinMarginedCalculationModeShortLabel(coinMarginedCalculationMode)}）"
+    SettlementMode.CoinMargined -> settlementModeLabel(settlementMode)
 }
 
 @Composable

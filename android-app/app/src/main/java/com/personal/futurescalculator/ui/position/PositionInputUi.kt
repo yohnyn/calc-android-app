@@ -3,12 +3,17 @@ package com.personal.futurescalculator.ui.position
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -24,34 +29,38 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.personal.futurescalculator.model.AmountField
 import com.personal.futurescalculator.model.CalculationInput
-import com.personal.futurescalculator.model.CalculationResult
+import com.personal.futurescalculator.model.CoinAsset
+import com.personal.futurescalculator.model.CoinMarginedCalculationMode
 import com.personal.futurescalculator.model.MarginMode
 import com.personal.futurescalculator.model.SettlementMode
 import com.personal.futurescalculator.ui.LeverageSelector
 import com.personal.futurescalculator.ui.MarginModeSelector
 import com.personal.futurescalculator.ui.NumberInput
 import com.personal.futurescalculator.ui.PositionSideSelector
-import com.personal.futurescalculator.ui.theme.LocalProfitLossPalette
-import com.personal.futurescalculator.util.DecimalFormatters
+import com.personal.futurescalculator.ui.coin.CoinMarketHeader
 import java.math.BigDecimal
 import kotlinx.coroutines.delay
 
 @Composable
 fun PositionInputSection(
     input: CalculationInput,
-    result: CalculationResult?,
+    coin: CoinAsset?,
     settlementMode: SettlementMode,
-    symbol: String,
+    coinMarginedCalculationMode: CoinMarginedCalculationMode,
+    amountInputMode: AmountField,
     targetStopEnabled: Boolean,
     targetStopHighlightKey: Int = 0,
+    onCoinClick: () -> Unit,
+    onSettlementModeChange: (SettlementMode) -> Unit,
     onTargetStopEnabledChange: (Boolean) -> Unit,
     onInputChange: (CalculationInput) -> Unit,
     onAmountInputChange: (AmountField, BigDecimal?) -> Unit,
-    onShowFeeSettings: () -> Unit,
-    onResultClick: () -> Unit,
     onSubmit: () -> Unit
 ) {
     var targetStopHighlighted by remember { mutableStateOf(false) }
+    var amountMenuExpanded by remember { mutableStateOf(false) }
+    var settlementMenuExpanded by remember { mutableStateOf(false) }
+
     LaunchedEffect(targetStopHighlightKey) {
         if (targetStopHighlightKey > 0) {
             targetStopHighlighted = true
@@ -59,6 +68,7 @@ fun PositionInputSection(
             targetStopHighlighted = false
         }
     }
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.small,
@@ -72,83 +82,156 @@ fun PositionInputSection(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("仓位参数", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
-                Text(
-                    modifier = Modifier.clickable(onClick = onShowFeeSettings),
-                    text = "费率设置",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-            PositionInputRow {
-                PositionSideSelector(
-                    selectedSide = input.side,
-                    onSideChange = { onInputChange(input.copy(side = it)) },
+                CoinMarketHeader(
+                    coin = coin,
+                    onClick = onCoinClick,
                     modifier = Modifier.weight(1f)
                 )
-                MarginModeSelector(
-                    selectedMode = input.marginMode,
-                    onModeChange = { mode ->
-                        if (mode == MarginMode.Isolated) {
-                            onInputChange(input.copy(marginMode = mode, totalFunds = null))
-                        } else {
-                            onInputChange(input.copy(marginMode = mode))
-                        }
-                    },
+                SettlementModeDropdown(
+                    settlementMode = settlementMode,
+                    expanded = settlementMenuExpanded,
+                    onExpandedChange = { settlementMenuExpanded = it },
+                    onSelect = onSettlementModeChange,
                     modifier = Modifier.weight(1f)
                 )
             }
-            PositionInputRow {
-                NumberInput(
-                    value = input.entryPrice,
-                    onValueChange = { onInputChange(input.copy(entryPrice = it)) },
-                    label = "开仓价",
-                    modifier = Modifier.weight(1f),
-                    onSubmit = onSubmit
-                )
-                NumberInput(
-                    value = input.exitPrice,
-                    onValueChange = {
-                        onInputChange(
-                            input.copy(
-                                exitPrice = it,
-                                targetProfitAmount = null,
-                                targetRoiPercent = null,
-                                maxLossAmount = null,
-                                maxLossRoiPercent = null
-                            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = amountTitle(settlementMode, amountInputMode, coinMarginedCalculationMode),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    },
-                    label = "平仓价",
-                    modifier = Modifier.weight(1f),
-                    onSubmit = onSubmit
-                )
-            }
-            PositionInputRow {
-                if (settlementMode == SettlementMode.UsdtMargined) {
+                        if (settlementMode == SettlementMode.UsdtMargined) {
+                            AmountModeDropdownChip(
+                                text = if (amountInputMode == AmountField.Margin) "按保证金" else "按币数量",
+                                expanded = amountMenuExpanded,
+                                onExpandedChange = { amountMenuExpanded = it },
+                                onSelect = { next ->
+                                    amountMenuExpanded = false
+                                    onAmountInputChange(
+                                        next,
+                                        if (next == AmountField.Margin) input.margin else input.quantity
+                                    )
+                                }
+                            )
+                        } else {
+                            Text(
+                                text = globalCoinModeLabel(coinMarginedCalculationMode),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                     NumberInput(
-                        value = input.margin,
-                        onValueChange = { onAmountInputChange(AmountField.Margin, it) },
-                        label = "保证金 USDT",
+                        value = amountValue(settlementMode, amountInputMode, input),
+                        onValueChange = {
+                            onAmountInputChange(
+                                if (settlementMode == SettlementMode.UsdtMargined && amountInputMode == AmountField.Margin) {
+                                    AmountField.Margin
+                                } else {
+                                    AmountField.Quantity
+                                },
+                                it
+                            )
+                        },
+                        label = amountFieldLabel(settlementMode, amountInputMode, coinMarginedCalculationMode),
+                        onSubmit = onSubmit
+                    )
+                }
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "杠杆",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
+                    ) {
+                        Box(
+                            modifier = Modifier.height(40.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "${input.leverage.stripTrailingZeros().toPlainString()}x",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
+            LeverageSelector(
+                leverage = input.leverage,
+                onLeverageChange = { onInputChange(input.copy(leverage = it)) }
+            )
+
+            if (settlementMode == SettlementMode.UsdtMargined) {
+                Text(
+                    text = "价格",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    NumberInput(
+                        value = input.entryPrice,
+                        onValueChange = { onInputChange(input.copy(entryPrice = it)) },
+                        label = "开仓价",
+                        modifier = Modifier.weight(1f),
+                        onSubmit = onSubmit
+                    )
+                    Text(
+                        text = "→",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    NumberInput(
+                        value = input.exitPrice,
+                        onValueChange = {
+                            onInputChange(
+                                input.copy(
+                                    exitPrice = it,
+                                    targetProfitAmount = null,
+                                    targetRoiPercent = null,
+                                    maxLossAmount = null,
+                                    maxLossRoiPercent = null
+                                )
+                            )
+                        },
+                        label = "平仓价",
                         modifier = Modifier.weight(1f),
                         onSubmit = onSubmit
                     )
                 }
-                NumberInput(
-                    value = input.quantity,
-                    onValueChange = { onAmountInputChange(AmountField.Quantity, it) },
-                    label = "$symbol 数量",
-                    modifier = Modifier.weight(1f),
-                    onSubmit = onSubmit
-                )
-            }
-            if (settlementMode == SettlementMode.UsdtMargined) {
-                PositionInputRow {
-                    CompactToggleChip(
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(32.dp),
+                    horizontalArrangement = Arrangement.spacedBy(28.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CompactTextToggle(
                         text = "止盈止损",
                         checked = targetStopEnabled,
                         onClick = {
@@ -157,10 +240,9 @@ fun PositionInputSection(
                             if (!checked) {
                                 onInputChange(input.clearedTargetStop())
                             }
-                        },
-                        modifier = Modifier.weight(1f)
+                        }
                     )
-                    CompactToggleChip(
+                    CompactTextToggle(
                         text = "估算强平价",
                         checked = input.estimateLiquidation,
                         onClick = {
@@ -171,10 +253,10 @@ fun PositionInputSection(
                                     totalFunds = if (checked) input.totalFunds else null
                                 )
                             )
-                        },
-                        modifier = Modifier.weight(1f)
+                        }
                     )
                 }
+
                 if (targetStopEnabled) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
@@ -223,64 +305,130 @@ fun PositionInputSection(
                         }
                     }
                 }
+
                 if (input.estimateLiquidation && input.marginMode == MarginMode.Cross) {
-                    PositionInputRow {
-                        NumberInput(
-                            value = input.totalFunds,
-                            onValueChange = { onInputChange(input.copy(totalFunds = it)) },
-                            label = "账户总资产 USDT",
-                            modifier = Modifier.weight(1f),
-                            onSubmit = onSubmit
-                        )
-                        Button(
-                            onClick = { onInputChange(input.copy(totalFunds = input.margin)) },
-                            enabled = input.margin != null && input.margin > BigDecimal.ZERO,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("使用保证金")
-                        }
-                    }
+                    NumberInput(
+                        value = input.totalFunds,
+                        onValueChange = { onInputChange(input.copy(totalFunds = it)) },
+                        label = "账户总资产 USDT",
+                        onSubmit = onSubmit
+                    )
                 }
-            }
-            LeverageSelector(
-                leverage = input.leverage,
-                onLeverageChange = { onInputChange(input.copy(leverage = it)) }
-            )
-            result?.let {
-                PositionCompactResult(
-                    input = input,
-                    result = it,
-                    targetStopEnabled = targetStopEnabled,
-                    onClick = onResultClick
-                )
             }
         }
     }
 }
 
 @Composable
-private fun CompactToggleChip(
+private fun SettlementModeDropdown(
+    settlementMode: SettlementMode,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onSelect: (SettlementMode) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(modifier = modifier) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onExpandedChange(true) },
+            shape = MaterialTheme.shapes.small,
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (settlementMode == SettlementMode.UsdtMargined) "U 本位" else "币本位",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text("˅", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) }) {
+            DropdownMenuItem(
+                text = { Text("U 本位") },
+                onClick = {
+                    onExpandedChange(false)
+                    onSelect(SettlementMode.UsdtMargined)
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("币本位") },
+                onClick = {
+                    onExpandedChange(false)
+                    onSelect(SettlementMode.CoinMargined)
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun AmountModeDropdownChip(
+    text: String,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onSelect: (AmountField) -> Unit
+) {
+    Box {
+        Surface(
+            modifier = Modifier.clickable { onExpandedChange(true) },
+            shape = MaterialTheme.shapes.small,
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = text, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+                Text("˅", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) }) {
+            DropdownMenuItem(
+                text = { Text("按保证金") },
+                onClick = {
+                    onExpandedChange(false)
+                    onSelect(AmountField.Margin)
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("按币数量") },
+                onClick = {
+                    onExpandedChange(false)
+                    onSelect(AmountField.Quantity)
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompactTextToggle(
     text: String,
     checked: Boolean,
-    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = MaterialTheme.shapes.small,
-        color = if (checked) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.42f)
-            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
-        border = BorderStroke(
-            1.dp,
-            if (checked) MaterialTheme.colorScheme.primary.copy(alpha = 0.52f)
-            else MaterialTheme.colorScheme.outline.copy(alpha = 0.16f)
-        )
+    Row(
+        modifier = Modifier.clickable(onClick = onClick),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-            text = "${if (checked) "☑" else "☐"} $text",
+            text = if (checked) "☑" else "☐",
+            style = MaterialTheme.typography.labelLarge,
+            color = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = text,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
             color = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
@@ -288,79 +436,36 @@ private fun CompactToggleChip(
     }
 }
 
-@Composable
-private fun PositionCompactResult(
-    input: CalculationInput,
-    result: CalculationResult,
-    targetStopEnabled: Boolean,
-    onClick: () -> Unit
-) {
-    val hasPnl = result.netPnl != null || result.takeProfitNetPnl != null || result.stopLossNetPnl != null
-    if (!hasPnl) return
-    val hasTargetStop = targetStopEnabled && (input.takeProfitPrice != null || input.stopLossPrice != null)
-    val palette = LocalProfitLossPalette.current
-    val primaryValue = when {
-        hasTargetStop && result.takeProfitNetPnl != null -> result.takeProfitNetPnl
-        else -> result.netPnl
-    }
-    val accent = if (primaryValue == null || primaryValue >= BigDecimal.ZERO) palette.profit else palette.loss
-    Surface(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape = MaterialTheme.shapes.small,
-        color = accent.copy(alpha = 0.10f),
-        border = BorderStroke(1.dp, accent.copy(alpha = 0.36f))
-    ) {
-        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (hasTargetStop) {
-                result.takeProfitNetPnl?.let { PositionResultMetric("止盈收益", it, accent) }
-                result.stopLossNetPnl?.let { PositionResultMetric("止损亏损", it, LocalProfitLossPalette.current.loss) }
-                PositionResultMetric("当前平仓收益", result.netPnl, accent)
-                PositionResultText("收益率", DecimalFormatters.formatPercentage(result.roiPercent))
-                if (input.estimateLiquidation) {
-                    result.liquidationPrice?.let { PositionResultText("估算强平价", "${DecimalFormatters.formatCurrency(it)} USDT") }
-                }
-                PositionResultText("手续费", "${DecimalFormatters.formatCurrency(result.totalFee ?: result.openFee)} USDT")
-            } else {
-                PositionResultMetric("预计收益", result.netPnl, accent)
-                if (input.estimateLiquidation) {
-                    result.liquidationPrice?.let { PositionResultText("估算强平价", "${DecimalFormatters.formatCurrency(it)} USDT") }
-                    result.distanceToLiquidationPercent?.let { PositionResultText("距离强平", DecimalFormatters.formatPercentage(it)) }
-                }
-                PositionResultText("收益率", DecimalFormatters.formatPercentage(result.roiPercent))
-                PositionResultText("手续费", "${DecimalFormatters.formatCurrency(result.totalFee ?: result.openFee)} USDT")
-            }
-        }
-    }
+private fun amountTitle(
+    settlementMode: SettlementMode,
+    amountInputMode: AmountField,
+    coinMarginedCalculationMode: CoinMarginedCalculationMode
+): String = when (settlementMode) {
+    SettlementMode.UsdtMargined -> if (amountInputMode == AmountField.Margin) "保证金" else "币数量"
+    SettlementMode.CoinMargined -> if (coinMarginedCalculationMode == CoinMarginedCalculationMode.CoinQuantity) "币数量" else "合约张数"
 }
 
-@Composable
-private fun PositionResultMetric(label: String, value: BigDecimal?, color: androidx.compose.ui.graphics.Color) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(
-            "${DecimalFormatters.formatPositiveNegative(value)} USDT",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = if (value == null || value >= BigDecimal.ZERO) color else LocalProfitLossPalette.current.loss
-        )
-    }
+private fun amountFieldLabel(
+    settlementMode: SettlementMode,
+    amountInputMode: AmountField,
+    coinMarginedCalculationMode: CoinMarginedCalculationMode
+): String = when (settlementMode) {
+    SettlementMode.UsdtMargined -> if (amountInputMode == AmountField.Margin) "保证金 USDT" else "币数量"
+    SettlementMode.CoinMargined -> if (coinMarginedCalculationMode == CoinMarginedCalculationMode.CoinQuantity) "币数量" else "合约张数"
 }
 
-@Composable
-private fun PositionResultText(label: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-    }
+private fun amountValue(
+    settlementMode: SettlementMode,
+    amountInputMode: AmountField,
+    input: CalculationInput
+): BigDecimal? = when (settlementMode) {
+    SettlementMode.UsdtMargined -> if (amountInputMode == AmountField.Margin) input.margin else input.quantity
+    SettlementMode.CoinMargined -> input.quantity
 }
 
-@Composable
-private fun PositionInputRow(content: @Composable RowScope.() -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        content = content
-    )
+private fun globalCoinModeLabel(mode: CoinMarginedCalculationMode): String = when (mode) {
+    CoinMarginedCalculationMode.CoinQuantity -> "按币数量"
+    CoinMarginedCalculationMode.InverseContract -> "按合约张数"
 }
 
 private fun CalculationInput.clearedTargetStop(): CalculationInput = copy(

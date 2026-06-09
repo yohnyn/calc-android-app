@@ -237,8 +237,7 @@ class FuturesCalculator {
         return if (input.marginMode == MarginMode.Cross) {
             val quantity = input.quantity ?: return null
             val positionNotional = input.entryPrice.multiply(quantity)
-            val totalFunds = input.totalFunds
-                ?: positionNotional.divide(input.leverage, DIVIDE_SCALE, RoundingMode.HALF_UP)
+            val totalFunds = input.totalFunds ?: return null
             val denominator = quantity.multiply(
                 if (input.side == PositionSide.Long) {
                     BigDecimal.ONE - maintenanceMarginRate

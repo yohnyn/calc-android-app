@@ -31,6 +31,7 @@ class PlanRepository(context: Context) {
                         ),
                         input = parseInput(item.getJSONObject("input")),
                         lastEditedAmountField = AmountField.valueOf(item.optString("amount_field", AmountField.Margin.name)),
+                        note = item.optString("note", ""),
                         createdAt = item.optLong("created_at", System.currentTimeMillis()),
                         updatedAt = item.optLong("updated_at", System.currentTimeMillis())
                     )
@@ -52,6 +53,7 @@ class PlanRepository(context: Context) {
                             .put("settlement_mode", plan.settlementMode.name)
                             .put("coin_mode", plan.coinMarginedCalculationMode.name)
                             .put("amount_field", plan.lastEditedAmountField.name)
+                            .put("note", plan.note)
                             .put("created_at", plan.createdAt)
                             .put("updated_at", plan.updatedAt)
                             .put("input", serializeInput(plan.input))

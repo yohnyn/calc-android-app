@@ -86,7 +86,7 @@ fun SupportAuthorCard(onClick: () -> Unit) {
 @Composable
 fun HomeBottomActions(
     onHistoryClick: () -> Unit,
-    onResetClick: () -> Unit,
+    onPlanClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
     Row(
@@ -103,18 +103,18 @@ fun HomeBottomActions(
             Text("历史")
         }
         HomeSoftOutlinedButton(
-            onClick = onResetClick,
+            onClick = onPlanClick,
             modifier = Modifier.weight(1f),
             shape = MaterialTheme.shapes.small
         ) {
-            Text("↺ 重置")
+            Text("方案库")
         }
-        Button(
+        HomeSoftOutlinedButton(
             onClick = onSettingsClick,
             modifier = Modifier.weight(1f),
             shape = MaterialTheme.shapes.small
         ) {
-            Text("⚙ 设置")
+            Text("设置")
         }
     }
 }

@@ -2,6 +2,7 @@ package com.personal.futurescalculator.domain
 
 import com.personal.futurescalculator.model.CalculationResult
 import com.personal.futurescalculator.model.CoinMarginedResult
+import com.personal.futurescalculator.model.CoinMarginedCalculationMode
 import com.personal.futurescalculator.model.ComparisonItem
 import com.personal.futurescalculator.model.ComparisonResult
 import com.personal.futurescalculator.model.SettlementMode
@@ -15,17 +16,13 @@ class ComparisonCalculator {
         current: CalculationResult?,
         currentCoinMargined: CoinMarginedResult? = null,
         currentSettlementMode: SettlementMode = SettlementMode.UsdtMargined,
+        coinMarginedCalculationMode: CoinMarginedCalculationMode = CoinMarginedCalculationMode.CoinQuantity,
         items: List<ComparisonItem>,
-        coinPricesById: Map<String, BigDecimal> = emptyMap(),
-        totalFundsForCrossLiquidation: BigDecimal? = null
+        coinPricesById: Map<String, BigDecimal> = emptyMap()
     ): List<ComparisonResult> {
         val currentComparablePnl = comparablePnl(currentSettlementMode, current, currentCoinMargined)
         return items.map { item ->
-            val input = if (item.input.totalFunds == null) {
-                item.input.copy(totalFunds = totalFundsForCrossLiquidation)
-            } else {
-                item.input
-            }
+            val input = item.input
 
             val result = if (item.settlementMode == SettlementMode.UsdtMargined) {
                 futuresCalculator.calculate(input)
@@ -34,7 +31,7 @@ class ComparisonCalculator {
             }
             val coinMarginedResult = if (item.settlementMode == SettlementMode.CoinMargined) {
                 coinMarginedCalculator.calculate(
-                    calculationMode = item.coinMarginedCalculationMode,
+                    calculationMode = coinMarginedCalculationMode,
                     side = input.side,
                     quantity = input.quantity,
                     entryPrice = input.entryPrice,

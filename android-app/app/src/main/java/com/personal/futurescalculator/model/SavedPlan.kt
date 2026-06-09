@@ -8,6 +8,7 @@ data class SavedPlan(
     val coinMarginedCalculationMode: CoinMarginedCalculationMode,
     val input: CalculationInput,
     val lastEditedAmountField: AmountField = AmountField.Margin,
+    val note: String = "",
     val createdAt: Long,
     val updatedAt: Long
 )
@@ -19,7 +20,8 @@ fun SavedPlan.toComparisonItem(): ComparisonItem = ComparisonItem(
     settlementMode = settlementMode,
     coinMarginedCalculationMode = coinMarginedCalculationMode,
     input = input,
-    lastEditedAmountField = lastEditedAmountField
+    lastEditedAmountField = lastEditedAmountField,
+    note = note
 )
 
 fun ComparisonItem.toSavedPlan(createdAt: Long = System.currentTimeMillis()): SavedPlan = SavedPlan(
@@ -33,9 +35,12 @@ fun ComparisonItem.toSavedPlan(createdAt: Long = System.currentTimeMillis()): Sa
         targetProfitAmount = null,
         targetRoiPercent = null,
         maxLossAmount = null,
-        maxLossRoiPercent = null
+        maxLossRoiPercent = null,
+        totalFunds = null,
+        estimateLiquidation = false
     ),
     lastEditedAmountField = lastEditedAmountField,
+    note = "",
     createdAt = createdAt,
     updatedAt = System.currentTimeMillis()
 )

@@ -42,6 +42,7 @@ import com.personal.futurescalculator.model.CalculationInput
 import com.personal.futurescalculator.model.CalculationResult
 import com.personal.futurescalculator.model.PositionSide
 import com.personal.futurescalculator.model.SettlementMode
+import com.personal.futurescalculator.ui.DropdownChevronIcon
 import com.personal.futurescalculator.ui.NumberInput
 import com.personal.futurescalculator.ui.SectionPanel
 import com.personal.futurescalculator.ui.theme.LocalProfitLossPalette
@@ -76,21 +77,35 @@ fun AveragingDecisionEntryCard(onClick: () -> Unit) {
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = MaterialTheme.shapes.small,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.52f)
+            containerColor = MaterialTheme.colorScheme.surface
         ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.28f))
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = "补仓助手",
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
             )
-            Text("展开 ˅", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "展开",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Box(contentAlignment = Alignment.Center) {
+                    DropdownChevronIcon(iconSize = 16.dp)
+                }
+            }
         }
     }
 }

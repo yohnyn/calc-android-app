@@ -266,7 +266,7 @@ private fun MainOrderedResultSection(input: CalculationInput, result: Calculatio
             if (input.estimateLiquidation) {
                 result.liquidationPrice?.let {
                     MetricTile(
-                        label = "估算强平价",
+                        label = "强平价格",
                         value = "${DecimalFormatters.formatCurrency(it)} USDT",
                         valueColor = WarningAmber
                     )
@@ -330,7 +330,7 @@ private fun MainRiskCostSection(result: CalculationResult) {
         Text("强平与费用", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         if (result.liquidationPrice != null) {
             MetricTile(
-                label = "估算强平价",
+                label = "强平价格",
                 value = "${DecimalFormatters.formatCurrency(result.liquidationPrice)} USDT",
                 supporting = if (result.usedTotalFundsForLiquidation) {
                     "已使用总资金参与强平计算；未计其他仓位、手续费、资金费率与阶梯维持保证金"
@@ -376,7 +376,7 @@ private fun MainTargetStopSection(input: CalculationInput, result: CalculationRe
     if (!hasTargetOrStop) return
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("止盈止损", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text("止盈/止损", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -614,7 +614,7 @@ fun ResultCard(
             )
             if (result.liquidationPrice != null) {
                 MetricTile(
-                    label = "估算强平价",
+                label = "强平价格",
                     value = "${DecimalFormatters.formatCurrency(result.liquidationPrice)} USDT",
                     supporting = if (result.usedTotalFundsForLiquidation) {
                         "已使用总资金参与强平计算；未计其他仓位、手续费、资金费率与阶梯维持保证金"
@@ -712,7 +712,7 @@ private fun resultSourceLabel(input: CalculationInput?, result: CalculationResul
         result.stopLossPriceByAmount != null -> "按目标亏损反推价计算"
         result.stopLossPriceByRoi != null -> "按目标亏损 ROI 反推价计算"
         result.netPnl != null -> "按平仓价计算"
-        else -> "等待平仓价或止盈止损输入"
+        else -> "等待平仓价或止盈/止损输入"
     }
 }
 

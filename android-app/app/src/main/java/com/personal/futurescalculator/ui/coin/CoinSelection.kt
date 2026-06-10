@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -44,6 +46,7 @@ import androidx.compose.ui.window.Dialog
 import com.personal.futurescalculator.data.CoinRepository
 import com.personal.futurescalculator.model.CoinAsset
 import com.personal.futurescalculator.ui.CompactTextInput
+import com.personal.futurescalculator.ui.DropdownChevronIcon
 import com.personal.futurescalculator.ui.NumberInput
 import java.math.BigDecimal
 import kotlinx.coroutines.Dispatchers
@@ -57,34 +60,43 @@ fun CoinMarketHeader(
 ) {
     Surface(
         modifier = modifier
+            .height(52.dp)
             .clickable(onClick = onClick),
         shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            CoinIcon(coin = coin, size = 30)
+            CoinIcon(coin = coin, size = 34)
             Column(
                 modifier = Modifier.weight(1f).padding(start = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
+                verticalArrangement = Arrangement.spacedBy(1.dp)
             ) {
                 Text(
+                    text = "币种",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
                     text = coin?.symbol ?: "选择币种",
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
             }
-            Text(
-                text = "˅",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
+            HeaderChevron()
         }
+    }
+}
+
+@Composable
+private fun HeaderChevron() {
+    Box(modifier = Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+        DropdownChevronIcon(iconSize = 18.dp)
     }
 }
 
@@ -111,19 +123,29 @@ fun CoinIcon(coin: CoinAsset?, size: Int) {
     }
 
     if (resourceId != 0) {
-        Image(
-            painter = androidx.compose.ui.res.painterResource(id = resourceId),
-            contentDescription = coin?.symbol,
-            modifier = Modifier.width(size.dp).height(size.dp).clip(CircleShape),
-            contentScale = ContentScale.Fit
-        )
+        Box(
+            modifier = Modifier.size(size.dp).clip(CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = androidx.compose.ui.res.painterResource(id = resourceId),
+                contentDescription = coin?.symbol,
+                modifier = Modifier.fillMaxSize().padding(2.dp),
+                contentScale = ContentScale.Fit
+            )
+        }
     } else if (bitmap != null) {
-        Image(
-            bitmap = bitmap,
-            contentDescription = coin?.symbol,
-            modifier = Modifier.width(size.dp).height(size.dp).clip(CircleShape),
-            contentScale = ContentScale.Fit
-        )
+        Box(
+            modifier = Modifier.size(size.dp).clip(CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                bitmap = bitmap,
+                contentDescription = coin?.symbol,
+                modifier = Modifier.fillMaxSize().padding(2.dp),
+                contentScale = ContentScale.Fit
+            )
+        }
     } else {
         Surface(
             modifier = Modifier.width(size.dp).height(size.dp),

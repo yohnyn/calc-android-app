@@ -22,7 +22,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -63,11 +62,16 @@ import com.personal.futurescalculator.model.SavedPlan
 import com.personal.futurescalculator.model.SettlementMode
 import com.personal.futurescalculator.model.toComparisonItem
 import com.personal.futurescalculator.ui.CompactTextInput
+import com.personal.futurescalculator.ui.AppDropdownMenu
+import com.personal.futurescalculator.ui.AppDropdownMenuItemPadding
+import com.personal.futurescalculator.ui.AppDropdownMenuText
+import com.personal.futurescalculator.ui.DropdownChevronIcon
 import com.personal.futurescalculator.ui.LeverageSelector
 import com.personal.futurescalculator.ui.MarginModeSelector
 import com.personal.futurescalculator.ui.NumberInput
 import com.personal.futurescalculator.ui.PositionSideSelector
 import com.personal.futurescalculator.ui.coin.CoinIcon
+import com.personal.futurescalculator.ui.position.AmountUnitInput
 import com.personal.futurescalculator.ui.results.MetricTile
 import com.personal.futurescalculator.ui.results.pnlColor
 import com.personal.futurescalculator.ui.results.pnlText
@@ -386,6 +390,7 @@ fun ComparisonSchemeEditorDialog(
 ) {
     var item by remember(initialItem.id) { mutableStateOf(initialItem) }
     var showCoinDialog by remember { mutableStateOf(false) }
+    var amountMenuExpanded by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val coin = coins.firstOrNull { it.id == item.coinId }
@@ -436,7 +441,8 @@ fun ComparisonSchemeEditorDialog(
                         ComparisonSoftOutlinedButton(onClick = { showCoinDialog = true }, modifier = Modifier.weight(1f)) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 CoinIcon(coin = coin, size = 24)
-                                Text("${coin?.symbol ?: "币"} ▼")
+                                Text(coin?.symbol ?: "币", fontWeight = FontWeight.SemiBold)
+                                DropdownChevronIcon(iconSize = 16.dp)
                             }
                         }
                         ComparisonOptionChips(
@@ -450,19 +456,61 @@ fun ComparisonSchemeEditorDialog(
                     }
                     PositionSideSelector(item.input.side, { item = item.copy(input = item.input.copy(side = it)) })
                     MarginModeSelector(item.input.marginMode, { item = item.copy(input = item.input.copy(marginMode = it)) })
-                    LeverageSelector(item.input.leverage, { item = item.copy(input = item.input.copy(leverage = it)) })
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        NumberInput(
-                            value = item.input.margin,
-                            onValueChange = { item = item.copy(input = item.input.copy(margin = it, quantity = null), lastEditedAmountField = AmountField.Margin) },
-                            label = "保证金",
-                            modifier = Modifier.weight(1f)
-                        )
-                        NumberInput(
-                            value = item.input.quantity,
-                            onValueChange = { item = item.copy(input = item.input.copy(quantity = it, margin = null), lastEditedAmountField = AmountField.Quantity) },
-                            label = "${coin?.symbol ?: "币"} 数量",
-                            modifier = Modifier.weight(1f)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Column(modifier = Modifier.weight(1.35f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            val amountIsMargin = item.settlementMode == SettlementMode.UsdtMargined &&
+                                item.lastEditedAmountField == AmountField.Margin
+                            val selectedAmountUnit = when {
+                                item.settlementMode == SettlementMode.UsdtMargined && amountIsMargin -> "USDT"
+                                item.settlementMode == SettlementMode.UsdtMargined -> coin?.symbol ?: "币"
+                                item.coinMarginedCalculationMode == CoinMarginedCalculationMode.CoinQuantity -> coin?.symbol ?: "币"
+                                else -> "张"
+                            }
+                            Text(
+                                text = "仓位",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            AmountUnitInput(
+                                value = if (amountIsMargin) item.input.margin else item.input.quantity,
+                                onValueChange = {
+                                    item = if (amountIsMargin) {
+                                        item.copy(input = item.input.copy(margin = it, quantity = null))
+                                    } else {
+                                        item.copy(input = item.input.copy(quantity = it, margin = null))
+                                    }
+                                },
+                                selectedUnit = selectedAmountUnit,
+                                coinUnit = coin?.symbol ?: "币",
+                                expanded = amountMenuExpanded,
+                                onExpandedChange = { amountMenuExpanded = it },
+                                onUnitSelect = { next ->
+                                    amountMenuExpanded = false
+                                    item = item.copy(
+                                        input = if (next == AmountField.Margin) {
+                                            item.input.copy(margin = item.input.margin, quantity = null)
+                                        } else {
+                                            item.input.copy(quantity = item.input.quantity, margin = null)
+                                        },
+                                        lastEditedAmountField = next
+                                    )
+                                },
+                                onSubmit = {
+                                    focusManager.clearFocus(force = true)
+                                    keyboardController?.hide()
+                                },
+                                unitSelectable = item.settlementMode == SettlementMode.UsdtMargined
+                            )
+                        }
+                        LeverageSelector(
+                            leverage = item.input.leverage,
+                            onLeverageChange = { item = item.copy(input = item.input.copy(leverage = it)) },
+                            modifier = Modifier.weight(0.85f)
                         )
                     }
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -595,7 +643,7 @@ fun createComparisonHistorySnapshot(schemes: List<ComparisonSchemeView>): Histor
                 add(HistoryField("ROI", if (scheme.settlementMode == SettlementMode.UsdtMargined) DecimalFormatters.formatPercentage(scheme.result?.roiPercent) else "不适用"))
                 add(HistoryField("手续费", if (scheme.settlementMode == SettlementMode.UsdtMargined) "${DecimalFormatters.formatCurrency(scheme.result?.totalFee)} USDT" else "不适用"))
                 if (scheme.input.estimateLiquidation && scheme.result?.liquidationPrice != null) {
-                    add(HistoryField("估算强平价", "${DecimalFormatters.formatCurrency(scheme.result.liquidationPrice)} USDT"))
+                    add(HistoryField("强平价格", "${DecimalFormatters.formatCurrency(scheme.result.liquidationPrice)} USDT"))
                 }
             }
             HistorySection("${scheme.name} · ${scheme.symbol}", fields)
@@ -769,19 +817,27 @@ private fun ComparisonDropdownSelector(
             onClick = { expanded = true },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(text)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text)
+                DropdownChevronIcon(iconSize = 16.dp)
+            }
         }
-        DropdownMenu(
+        AppDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false }
         ) {
             options.forEach { (label, onSelect) ->
                 DropdownMenuItem(
-                    text = { Text(label) },
+                    text = { AppDropdownMenuText(label) },
                     onClick = {
                         expanded = false
                         onSelect()
-                    }
+                    },
+                    contentPadding = AppDropdownMenuItemPadding
                 )
             }
         }
@@ -1081,7 +1137,7 @@ private fun ComparisonSchemeSummary(scheme: ComparisonSchemeView) {
                 if (scheme.input.estimateLiquidation) {
                     comparisonLiquidationPrice(scheme.input, scheme.result)?.let {
                         MetricTile(
-                            label = "估算强平价",
+                            label = "强平价格",
                             value = "${DecimalFormatters.formatCurrency(it)} USDT"
                         )
                     }

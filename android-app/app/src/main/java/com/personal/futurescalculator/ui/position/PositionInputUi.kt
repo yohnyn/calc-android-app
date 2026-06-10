@@ -2,17 +2,18 @@ package com.personal.futurescalculator.ui.position
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.DropdownMenu
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -25,7 +26,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.personal.futurescalculator.model.AmountField
 import com.personal.futurescalculator.model.CalculationInput
@@ -37,6 +43,10 @@ import com.personal.futurescalculator.ui.LeverageSelector
 import com.personal.futurescalculator.ui.MarginModeSelector
 import com.personal.futurescalculator.ui.NumberInput
 import com.personal.futurescalculator.ui.PositionSideSelector
+import com.personal.futurescalculator.ui.AppDropdownMenu
+import com.personal.futurescalculator.ui.AppDropdownMenuItemPadding
+import com.personal.futurescalculator.ui.AppDropdownMenuText
+import com.personal.futurescalculator.ui.DropdownChevronIcon
 import com.personal.futurescalculator.ui.coin.CoinMarketHeader
 import java.math.BigDecimal
 import kotlinx.coroutines.delay
@@ -49,10 +59,13 @@ fun PositionInputSection(
     coinMarginedCalculationMode: CoinMarginedCalculationMode,
     amountInputMode: AmountField,
     targetStopEnabled: Boolean,
+    targetPriceExpanded: Boolean,
     targetStopHighlightKey: Int = 0,
     onCoinClick: () -> Unit,
     onSettlementModeChange: (SettlementMode) -> Unit,
     onTargetStopEnabledChange: (Boolean) -> Unit,
+    onTargetPriceExpandedChange: (Boolean) -> Unit,
+    targetPriceContent: @Composable (() -> Unit)? = null,
     onInputChange: (CalculationInput) -> Unit,
     onAmountInputChange: (AmountField, BigDecimal?) -> Unit,
     onSubmit: () -> Unit
@@ -102,93 +115,76 @@ fun PositionInputSection(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                PositionSideSelector(
+                    selectedSide = input.side,
+                    onSideChange = { onInputChange(input.copy(side = it)) },
+                    modifier = Modifier.weight(1f)
+                )
+                MarginModeSelector(
+                    selectedMode = input.marginMode,
+                    onModeChange = { onInputChange(input.copy(marginMode = it)) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.Top
             ) {
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = amountTitle(settlementMode, amountInputMode, coinMarginedCalculationMode),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        if (settlementMode == SettlementMode.UsdtMargined) {
-                            AmountModeDropdownChip(
-                                text = if (amountInputMode == AmountField.Margin) "按保证金" else "按币数量",
-                                expanded = amountMenuExpanded,
-                                onExpandedChange = { amountMenuExpanded = it },
-                                onSelect = { next ->
-                                    amountMenuExpanded = false
-                                    onAmountInputChange(
-                                        next,
-                                        if (next == AmountField.Margin) input.margin else input.quantity
-                                    )
-                                }
-                            )
-                        } else {
-                            Text(
-                                text = globalCoinModeLabel(coinMarginedCalculationMode),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                    NumberInput(
-                        value = amountValue(settlementMode, amountInputMode, input),
-                        onValueChange = {
-                            onAmountInputChange(
-                                if (settlementMode == SettlementMode.UsdtMargined && amountInputMode == AmountField.Margin) {
-                                    AmountField.Margin
-                                } else {
-                                    AmountField.Quantity
-                                },
-                                it
-                            )
-                        },
-                        label = amountFieldLabel(settlementMode, amountInputMode, coinMarginedCalculationMode),
-                        onSubmit = onSubmit
-                    )
-                }
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(modifier = Modifier.weight(1.35f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = "杠杆",
+                        text = amountTitle(settlementMode, amountInputMode, coinMarginedCalculationMode),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = MaterialTheme.shapes.small,
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
-                    ) {
-                        Box(
-                            modifier = Modifier.height(40.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "${input.leverage.stripTrailingZeros().toPlainString()}x",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                    if (settlementMode == SettlementMode.UsdtMargined) {
+                        AmountUnitInput(
+                            value = amountValue(settlementMode, amountInputMode, input),
+                            onValueChange = { onAmountInputChange(amountInputMode, it) },
+                            selectedUnit = if (amountInputMode == AmountField.Margin) "USDT" else (coin?.symbol ?: "币"),
+                            coinUnit = coin?.symbol ?: "币",
+                            expanded = amountMenuExpanded,
+                            onExpandedChange = { amountMenuExpanded = it },
+                            onUnitSelect = { next ->
+                                amountMenuExpanded = false
+                                onAmountInputChange(
+                                    next,
+                                    if (next == AmountField.Margin) input.margin else input.quantity
+                                )
+                            },
+                            onSubmit = onSubmit
+                        )
+                    } else {
+                        AmountUnitInput(
+                            value = amountValue(settlementMode, amountInputMode, input),
+                            onValueChange = { onAmountInputChange(AmountField.Quantity, it) },
+                            selectedUnit = if (coinMarginedCalculationMode == CoinMarginedCalculationMode.CoinQuantity) {
+                                coin?.symbol ?: "币"
+                            } else {
+                                "张"
+                            },
+                            coinUnit = coin?.symbol ?: "币",
+                            expanded = false,
+                            onExpandedChange = {},
+                            onUnitSelect = {},
+                            onSubmit = onSubmit,
+                            unitSelectable = false
+                        )
                     }
+                }
+                Column(modifier = Modifier.weight(0.85f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    LeverageSelector(
+                        leverage = input.leverage,
+                        onLeverageChange = { onInputChange(input.copy(leverage = it)) }
+                    )
                 }
             }
 
-            LeverageSelector(
-                leverage = input.leverage,
-                onLeverageChange = { onInputChange(input.copy(leverage = it)) }
-            )
-
             if (settlementMode == SettlementMode.UsdtMargined) {
-                Text(
-                    text = "价格",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -203,6 +199,7 @@ fun PositionInputSection(
                     )
                     Text(
                         text = "→",
+                        modifier = Modifier.padding(top = 18.dp),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -227,12 +224,12 @@ fun PositionInputSection(
                 }
 
                 Row(
-                    modifier = Modifier.fillMaxWidth().height(32.dp),
-                    horizontalArrangement = Arrangement.spacedBy(28.dp),
+                    modifier = Modifier.fillMaxWidth().height(34.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     CompactTextToggle(
-                        text = "止盈止损",
+                        text = "止盈/止损",
                         checked = targetStopEnabled,
                         onClick = {
                             val checked = !targetStopEnabled
@@ -243,7 +240,12 @@ fun PositionInputSection(
                         }
                     )
                     CompactTextToggle(
-                        text = "估算强平价",
+                        text = "目标价格",
+                        checked = targetPriceExpanded,
+                        onClick = { onTargetPriceExpandedChange(!targetPriceExpanded) }
+                    )
+                    CompactTextToggle(
+                        text = "强平价格",
                         checked = input.estimateLiquidation,
                         onClick = {
                             val checked = !input.estimateLiquidation
@@ -306,6 +308,21 @@ fun PositionInputSection(
                     }
                 }
 
+                if (targetPriceExpanded && targetPriceContent != null) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.surface
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(0.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            targetPriceContent()
+                        }
+                    }
+                }
+
                 if (input.estimateLiquidation && input.marginMode == MarginMode.Cross) {
                     NumberInput(
                         value = input.totalFunds,
@@ -331,82 +348,167 @@ private fun SettlementModeDropdown(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
+                .height(52.dp)
                 .clickable { onExpandedChange(true) },
             shape = MaterialTheme.shapes.small,
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = if (settlementMode == SettlementMode.UsdtMargined) "U 本位" else "币本位",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text("˅", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(
+                        text = "结算",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = if (settlementMode == SettlementMode.UsdtMargined) "U 本位" else "币本位",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                DropdownChevronIcon()
             }
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) }) {
+        AppDropdownMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) }) {
             DropdownMenuItem(
-                text = { Text("U 本位") },
+                text = { AppDropdownMenuText("U 本位") },
                 onClick = {
                     onExpandedChange(false)
                     onSelect(SettlementMode.UsdtMargined)
-                }
+                },
+                contentPadding = AppDropdownMenuItemPadding
             )
             DropdownMenuItem(
-                text = { Text("币本位") },
+                text = { AppDropdownMenuText("币本位") },
                 onClick = {
                     onExpandedChange(false)
                     onSelect(SettlementMode.CoinMargined)
-                }
+                },
+                contentPadding = AppDropdownMenuItemPadding
             )
         }
     }
 }
 
 @Composable
-private fun AmountModeDropdownChip(
-    text: String,
+fun AmountUnitInput(
+    value: BigDecimal?,
+    onValueChange: (BigDecimal?) -> Unit,
+    selectedUnit: String,
+    coinUnit: String,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
-    onSelect: (AmountField) -> Unit
+    onUnitSelect: (AmountField) -> Unit,
+    onSubmit: () -> Unit,
+    unitSelectable: Boolean = true
 ) {
+    val textValue = value?.stripTrailingZeros()?.toPlainString() ?: ""
+    var textFieldValue by remember(selectedUnit) { mutableStateOf(TextFieldValue(textValue)) }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(value) {
+        val updatedValue = value?.stripTrailingZeros()?.toPlainString() ?: ""
+        val currentParsedValue = runCatching { BigDecimal(textFieldValue.text) }.getOrNull()
+        val currentMatchesValue = currentParsedValue != null &&
+            value != null &&
+            currentParsedValue.compareTo(value) == 0
+
+        if (value == null && textFieldValue.text.isNotEmpty()) {
+            textFieldValue = TextFieldValue("")
+        } else if (!currentMatchesValue && updatedValue != textFieldValue.text) {
+            textFieldValue = TextFieldValue(updatedValue)
+        }
+    }
+
     Box {
         Surface(
-            modifier = Modifier.clickable { onExpandedChange(true) },
+            modifier = Modifier.fillMaxWidth().height(40.dp),
             shape = MaterialTheme.shapes.small,
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f))
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = text, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
-                Text("˅", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                BasicTextField(
+                    value = textFieldValue,
+                    onValueChange = {
+                        val normalizedText = it.text.trim()
+                        textFieldValue = it.copy(text = normalizedText)
+                        if (normalizedText.isEmpty()) {
+                            onValueChange(null)
+                            return@BasicTextField
+                        }
+                        runCatching { BigDecimal(normalizedText) }.onSuccess(onValueChange)
+                    },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            focusManager.clearFocus(force = true)
+                            keyboardController?.hide()
+                            onSubmit()
+                        }
+                    ),
+                    textStyle = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurface)
+                )
+                Surface(
+                    modifier = Modifier.height(22.dp),
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f)
+                ) {
+                    Box(modifier = Modifier.size(width = 1.dp, height = 22.dp))
+                }
+                Row(
+                    modifier = Modifier
+                        .height(40.dp)
+                        .clickable(enabled = unitSelectable) { onExpandedChange(true) }
+                        .padding(horizontal = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = selectedUnit,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (unitSelectable) {
+                        DropdownChevronIcon(iconSize = 16.dp)
+                    }
+                }
             }
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) }) {
-            DropdownMenuItem(
-                text = { Text("按保证金") },
-                onClick = {
-                    onExpandedChange(false)
-                    onSelect(AmountField.Margin)
-                }
-            )
-            DropdownMenuItem(
-                text = { Text("按币数量") },
-                onClick = {
-                    onExpandedChange(false)
-                    onSelect(AmountField.Quantity)
-                }
-            )
+        if (unitSelectable) {
+            AppDropdownMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) }) {
+                DropdownMenuItem(
+                    text = { AppDropdownMenuText("USDT") },
+                    onClick = {
+                        onExpandedChange(false)
+                        onUnitSelect(AmountField.Margin)
+                    },
+                    contentPadding = AppDropdownMenuItemPadding
+                )
+                DropdownMenuItem(
+                    text = { AppDropdownMenuText(coinUnit) },
+                    onClick = {
+                        onExpandedChange(false)
+                        onUnitSelect(AmountField.Quantity)
+                    },
+                    contentPadding = AppDropdownMenuItemPadding
+                )
+            }
         }
     }
 }
@@ -417,8 +519,13 @@ private fun CompactTextToggle(
     checked: Boolean,
     onClick: () -> Unit
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     Row(
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = Modifier.clickable(
+            interactionSource = interactionSource,
+            indication = null,
+            onClick = onClick
+        ),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -441,7 +548,7 @@ private fun amountTitle(
     amountInputMode: AmountField,
     coinMarginedCalculationMode: CoinMarginedCalculationMode
 ): String = when (settlementMode) {
-    SettlementMode.UsdtMargined -> if (amountInputMode == AmountField.Margin) "保证金" else "币数量"
+    SettlementMode.UsdtMargined -> "仓位"
     SettlementMode.CoinMargined -> if (coinMarginedCalculationMode == CoinMarginedCalculationMode.CoinQuantity) "币数量" else "合约张数"
 }
 

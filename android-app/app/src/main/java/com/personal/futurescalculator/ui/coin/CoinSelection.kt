@@ -9,11 +9,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -124,31 +124,31 @@ fun CoinIcon(coin: CoinAsset?, size: Int) {
 
     if (resourceId != 0) {
         Box(
-            modifier = Modifier.size(size.dp).clip(CircleShape),
+            modifier = Modifier.requiredSize(size.dp).clip(CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Image(
                 painter = androidx.compose.ui.res.painterResource(id = resourceId),
                 contentDescription = coin?.symbol,
-                modifier = Modifier.fillMaxSize().padding(2.dp),
+                modifier = Modifier.requiredSize(size.dp),
                 contentScale = ContentScale.Fit
             )
         }
     } else if (bitmap != null) {
         Box(
-            modifier = Modifier.size(size.dp).clip(CircleShape),
+            modifier = Modifier.requiredSize(size.dp).clip(CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Image(
                 bitmap = bitmap,
                 contentDescription = coin?.symbol,
-                modifier = Modifier.fillMaxSize().padding(2.dp),
+                modifier = Modifier.requiredSize(size.dp),
                 contentScale = ContentScale.Fit
             )
         }
     } else {
         Surface(
-            modifier = Modifier.width(size.dp).height(size.dp),
+            modifier = Modifier.requiredSize(size.dp),
             shape = CircleShape,
             color = MaterialTheme.colorScheme.surfaceVariant
         ) {

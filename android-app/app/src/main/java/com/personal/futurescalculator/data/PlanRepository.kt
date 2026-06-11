@@ -77,7 +77,8 @@ class PlanRepository(context: Context) {
         stopLossPrice = json.optDecimal("stop_loss_price"),
         maintenanceMarginRatePercent = json.optDecimal("maintenance_margin_rate") ?: BigDecimal("0.5"),
         totalFunds = json.optDecimal("total_funds"),
-        estimateLiquidation = json.optBoolean("estimate_liquidation", false)
+        estimateLiquidation = json.optBoolean("estimate_liquidation", false),
+        calculateMaxOpen = json.optBoolean("calculate_max_open", false)
     )
 
     private fun serializeInput(input: CalculationInput): JSONObject = JSONObject()
@@ -95,6 +96,7 @@ class PlanRepository(context: Context) {
         .putDecimal("maintenance_margin_rate", input.maintenanceMarginRatePercent)
         .putDecimal("total_funds", input.totalFunds)
         .put("estimate_liquidation", input.estimateLiquidation)
+        .put("calculate_max_open", input.calculateMaxOpen)
 
     private fun JSONObject.optDecimal(key: String): BigDecimal? =
         optString(key).takeIf { it.isNotBlank() && it != "null" }?.let(::BigDecimal)

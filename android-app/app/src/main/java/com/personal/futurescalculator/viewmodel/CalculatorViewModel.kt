@@ -31,6 +31,7 @@ import com.personal.futurescalculator.model.ThemeMode
 import com.personal.futurescalculator.model.HistoryRecord
 import com.personal.futurescalculator.model.HistoryCategory
 import com.personal.futurescalculator.model.MarginMode
+import com.personal.futurescalculator.model.MaxOpenResult
 import com.personal.futurescalculator.model.PositionSide
 import com.personal.futurescalculator.model.toComparisonItem
 import com.personal.futurescalculator.model.toSavedPlan
@@ -46,6 +47,7 @@ data class CalculatorUiState(
     val input: CalculationInput = CalculationInput(),
     val lastEditedAmountField: AmountField = AmountField.Margin,
     val result: CalculationResult? = null,
+    val maxOpenResult: MaxOpenResult? = null,
     val comparisonItems: List<ComparisonItem> = emptyList(),
     val comparisonResults: List<ComparisonResult> = emptyList(),
     val averagingInput: AveragingInput = AveragingInput(),
@@ -311,6 +313,19 @@ class CalculatorViewModel(context: Context) : ViewModel() {
         _uiState.value = _uiState.value.copy(savedPlans = updated)
     }
 
+    fun clearSavedPlans() {
+        planRepository.save(emptyList())
+        uiPreferencesRepository.saveAveragingExpanded(false)
+        _uiState.value = _uiState.value.copy(
+            savedPlans = emptyList(),
+            comparisonItems = emptyList(),
+            comparisonResults = emptyList(),
+            averagingDecisionInput = AveragingDecisionInput(),
+            averagingDecisionResult = null,
+            averagingExpanded = false
+        )
+    }
+
     fun renameSavedPlan(id: String, name: String) {
         val resolvedName = name.trim().ifBlank { "未命名方案" }
         val updated = _uiState.value.savedPlans.map { plan ->
@@ -353,7 +368,7 @@ class CalculatorViewModel(context: Context) : ViewModel() {
     fun openSavedPlan(plan: SavedPlan) {
         _uiState.value = _uiState.value.copy(
             input = normalizeAmountFields(
-                plan.input.copy(totalFunds = null, estimateLiquidation = false),
+                plan.input.copy(totalFunds = null, estimateLiquidation = false, calculateMaxOpen = false),
                 plan.lastEditedAmountField
             ),
             selectedCoinId = plan.coinId,
@@ -460,7 +475,8 @@ class CalculatorViewModel(context: Context) : ViewModel() {
     private fun calculateResult() {
         val input = _uiState.value.input
         val result = futuresCalculator.calculate(input)
-        _uiState.value = _uiState.value.copy(result = result)
+        val maxOpenResult = futuresCalculator.calculateMaxOpen(input)
+        _uiState.value = _uiState.value.copy(result = result, maxOpenResult = maxOpenResult)
     }
     
     private fun calculateComparisonResults() {

@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -71,6 +73,7 @@ import com.personal.futurescalculator.ui.MarginModeSelector
 import com.personal.futurescalculator.ui.NumberInput
 import com.personal.futurescalculator.ui.PositionSideSelector
 import com.personal.futurescalculator.ui.coin.CoinIcon
+import com.personal.futurescalculator.ui.coin.CoinMarketHeader
 import com.personal.futurescalculator.ui.position.AmountUnitInput
 import com.personal.futurescalculator.ui.results.MetricTile
 import com.personal.futurescalculator.ui.results.pnlColor
@@ -391,6 +394,7 @@ fun ComparisonSchemeEditorDialog(
     var item by remember(initialItem.id) { mutableStateOf(initialItem) }
     var showCoinDialog by remember { mutableStateOf(false) }
     var amountMenuExpanded by remember { mutableStateOf(false) }
+    var settlementMenuExpanded by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val coin = coins.firstOrNull { it.id == item.coinId }
@@ -438,20 +442,17 @@ fun ComparisonSchemeEditorDialog(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        ComparisonSoftOutlinedButton(onClick = { showCoinDialog = true }, modifier = Modifier.weight(1f)) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                CoinIcon(coin = coin, size = 24)
-                                Text(coin?.symbol ?: "币", fontWeight = FontWeight.SemiBold)
-                                DropdownChevronIcon(iconSize = 16.dp)
-                            }
-                        }
-                        ComparisonOptionChips(
-                            firstText = "U 本位",
-                            secondText = "币本位",
-                            firstSelected = item.settlementMode == SettlementMode.UsdtMargined,
-                            onFirstClick = { item = item.copy(settlementMode = SettlementMode.UsdtMargined) },
-                            onSecondClick = { item = item.copy(settlementMode = SettlementMode.CoinMargined) },
-                            modifier = Modifier.weight(1f),
+                        CoinMarketHeader(
+                            coin = coin,
+                            onClick = { showCoinDialog = true },
+                            modifier = Modifier.weight(1f)
+                        )
+                        ComparisonSettlementDropdown(
+                            settlementMode = item.settlementMode,
+                            expanded = settlementMenuExpanded,
+                            onExpandedChange = { settlementMenuExpanded = it },
+                            onSelect = { item = item.copy(settlementMode = it) },
+                            modifier = Modifier.weight(1f)
                         )
                     }
                     PositionSideSelector(item.input.side, { item = item.copy(input = item.input.copy(side = it)) })
@@ -640,7 +641,7 @@ fun createComparisonHistorySnapshot(schemes: List<ComparisonSchemeView>): Histor
                 add(HistoryField("平仓价", "${DecimalFormatters.formatCurrency(scheme.input.exitPrice)} USDT"))
                 add(HistoryField(scheme.primaryPnlLabel(), scheme.primaryPnlText()))
                 add(HistoryField("折算收益", "${DecimalFormatters.formatPositiveNegative(scheme.comparablePnlUsdt())} USDT"))
-                add(HistoryField("ROI", if (scheme.settlementMode == SettlementMode.UsdtMargined) DecimalFormatters.formatPercentage(scheme.result?.roiPercent) else "不适用"))
+                add(HistoryField("保证金收益率（ROI）", if (scheme.settlementMode == SettlementMode.UsdtMargined) DecimalFormatters.formatPercentage(scheme.result?.roiPercent) else "不适用"))
                 add(HistoryField("手续费", if (scheme.settlementMode == SettlementMode.UsdtMargined) "${DecimalFormatters.formatCurrency(scheme.result?.totalFee)} USDT" else "不适用"))
                 if (scheme.input.estimateLiquidation && scheme.result?.liquidationPrice != null) {
                     add(HistoryField("强平价格", "${DecimalFormatters.formatCurrency(scheme.result.liquidationPrice)} USDT"))
@@ -812,7 +813,7 @@ private fun ComparisonDropdownSelector(
     modifier: Modifier = Modifier
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
-    Box(modifier = modifier) {
+    BoxWithConstraints(modifier = modifier) {
         ComparisonSoftOutlinedButton(
             onClick = { expanded = true },
             modifier = Modifier.fillMaxWidth()
@@ -828,7 +829,8 @@ private fun ComparisonDropdownSelector(
         }
         AppDropdownMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false }
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.width(maxWidth)
         ) {
             options.forEach { (label, onSelect) ->
                 DropdownMenuItem(
@@ -836,6 +838,63 @@ private fun ComparisonDropdownSelector(
                     onClick = {
                         expanded = false
                         onSelect()
+                    },
+                    contentPadding = AppDropdownMenuItemPadding
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ComparisonSettlementDropdown(
+    settlementMode: SettlementMode,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onSelect: (SettlementMode) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    BoxWithConstraints(modifier = modifier) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().height(52.dp).clickable { onExpandedChange(true) },
+            shape = MaterialTheme.shapes.small,
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(
+                        text = "结算",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = if (settlementMode == SettlementMode.UsdtMargined) "U 本位" else "币本位",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                DropdownChevronIcon(iconSize = 16.dp)
+            }
+        }
+        AppDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { onExpandedChange(false) },
+            modifier = Modifier.width(maxWidth)
+        ) {
+            listOf(
+                "U 本位" to SettlementMode.UsdtMargined,
+                "币本位" to SettlementMode.CoinMargined
+            ).forEach { (label, mode) ->
+                DropdownMenuItem(
+                    text = { AppDropdownMenuText(label) },
+                    onClick = {
+                        onExpandedChange(false)
+                        onSelect(mode)
                     },
                     contentPadding = AppDropdownMenuItemPadding
                 )
@@ -1103,7 +1162,7 @@ private fun ComparisonSchemeSummary(scheme: ComparisonSchemeView) {
                 ComparisonInputRow {
                     if (scheme.settlementMode == SettlementMode.UsdtMargined) {
                         MetricTile(
-                            label = "ROI",
+                            label = "保证金收益率（ROI）",
                             value = DecimalFormatters.formatPercentage(scheme.result?.roiPercent),
                             valueColor = pnlColor(scheme.result?.roiPercent),
                             modifier = Modifier.weight(1f)

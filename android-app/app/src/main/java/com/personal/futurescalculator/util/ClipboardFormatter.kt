@@ -24,7 +24,7 @@ object ClipboardFormatter {
                 appendLine("平仓价：${DecimalFormatters.formatCurrency(input.exitPrice)} USDT")
                 appendLine("保证金：${DecimalFormatters.formatCurrency(result?.requiredMargin)} USDT")
                 appendLine("净盈亏：${DecimalFormatters.formatPositiveNegative(result?.netPnl)} USDT")
-                append("ROI：${DecimalFormatters.formatPercentage(result?.roiPercent)}")
+                append("保证金收益率（ROI）：${DecimalFormatters.formatPercentage(result?.roiPercent)}")
             }
         }
         return buildString {
@@ -41,7 +41,7 @@ object ClipboardFormatter {
             appendLine()
             appendLine("【结果】")
             appendLine("净盈亏：${DecimalFormatters.formatPositiveNegative(result?.netPnl)} USDT")
-            appendLine("ROI：${DecimalFormatters.formatPercentage(result?.roiPercent)}")
+            appendLine("保证金收益率（ROI）：${DecimalFormatters.formatPercentage(result?.roiPercent)}")
             appendLine("交易费用约：${DecimalFormatters.formatCurrency(result?.totalFee)} USDT")
             appendLine()
             append("说明：仅为本地计算结果，不构成交易依据。")

@@ -5,12 +5,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -66,6 +68,7 @@ fun PositionInputSection(
     onTargetStopEnabledChange: (Boolean) -> Unit,
     onTargetPriceExpandedChange: (Boolean) -> Unit,
     targetPriceContent: @Composable (() -> Unit)? = null,
+    maxOpenContent: @Composable (() -> Unit)? = null,
     onInputChange: (CalculationInput) -> Unit,
     onAmountInputChange: (AmountField, BigDecimal?) -> Unit,
     onSubmit: () -> Unit
@@ -248,13 +251,14 @@ fun PositionInputSection(
                         text = "强平价格",
                         checked = input.estimateLiquidation,
                         onClick = {
-                            val checked = !input.estimateLiquidation
-                            onInputChange(
-                                input.copy(
-                                    estimateLiquidation = checked,
-                                    totalFunds = if (checked) input.totalFunds else null
-                                )
-                            )
+                            onInputChange(input.copy(estimateLiquidation = !input.estimateLiquidation))
+                        }
+                    )
+                    CompactTextToggle(
+                        text = "可开",
+                        checked = input.calculateMaxOpen,
+                        onClick = {
+                            onInputChange(input.copy(calculateMaxOpen = !input.calculateMaxOpen))
                         }
                     )
                 }
@@ -323,13 +327,16 @@ fun PositionInputSection(
                     }
                 }
 
-                if (input.estimateLiquidation && input.marginMode == MarginMode.Cross) {
+                if (input.estimateLiquidation || input.calculateMaxOpen) {
                     NumberInput(
                         value = input.totalFunds,
                         onValueChange = { onInputChange(input.copy(totalFunds = it)) },
-                        label = "账户总资产 USDT",
+                        label = "账户总资金 USDT",
                         onSubmit = onSubmit
                     )
+                }
+                if (input.calculateMaxOpen && maxOpenContent != null) {
+                    maxOpenContent()
                 }
             }
         }
@@ -344,7 +351,7 @@ private fun SettlementModeDropdown(
     onSelect: (SettlementMode) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(modifier = modifier) {
+    BoxWithConstraints(modifier = modifier) {
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -375,7 +382,11 @@ private fun SettlementModeDropdown(
                 DropdownChevronIcon()
             }
         }
-        AppDropdownMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) }) {
+        AppDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { onExpandedChange(false) },
+            modifier = Modifier.width(maxWidth)
+        ) {
             DropdownMenuItem(
                 text = { AppDropdownMenuText("U 本位") },
                 onClick = {
@@ -427,7 +438,7 @@ fun AmountUnitInput(
         }
     }
 
-    Box {
+    BoxWithConstraints {
         Surface(
             modifier = Modifier.fillMaxWidth().height(40.dp),
             shape = MaterialTheme.shapes.small,
@@ -491,7 +502,11 @@ fun AmountUnitInput(
             }
         }
         if (unitSelectable) {
-            AppDropdownMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) }) {
+            AppDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { onExpandedChange(false) },
+                modifier = Modifier.width(maxWidth)
+            ) {
                 DropdownMenuItem(
                     text = { AppDropdownMenuText("USDT") },
                     onClick = {

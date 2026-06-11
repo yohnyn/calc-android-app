@@ -65,6 +65,7 @@ fun HistoryScreen(
     onOpenPlan: (SavedPlan) -> Unit,
     onAddPlanToComparison: (SavedPlan) -> Unit,
     onDeletePlan: (String) -> Unit,
+    onClearPlans: () -> Unit,
     onRenamePlan: (String, String) -> Unit,
     onUpdatePlanNote: (String, String) -> Unit,
     onDuplicatePlan: (SavedPlan) -> Unit,
@@ -78,6 +79,7 @@ fun HistoryScreen(
     var showDeleteConfirm by rememberSaveable { mutableStateOf(false) }
     var pendingClearCategory by rememberSaveable { mutableStateOf<HistoryCategory?>(null) }
     var showClearConfirm by rememberSaveable { mutableStateOf(false) }
+    var showClearPlansConfirm by rememberSaveable { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(startOnPlans) {
         tab = if (startOnPlans) HistoryTab.Plans else HistoryTab.Records
     }
@@ -150,6 +152,28 @@ fun HistoryScreen(
             }
         )
     }
+    if (showClearPlansConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearPlansConfirm = false },
+            title = { Text("删除全部方案？") },
+            text = { Text("全部方案及已加入首页的对比方案将被删除，且无法恢复。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onClearPlans()
+                        showClearPlansConfirm = false
+                    }
+                ) {
+                    Text("全部删除", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearPlansConfirm = false }) {
+                    Text("取消", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        )
+    }
     HistoryPageLayout(
         title = null,
         onBack = onBack,
@@ -191,11 +215,21 @@ fun HistoryScreen(
                     }
                 }
             } else {
-                HistorySoftOutlinedButton(
-                    onClick = onBack,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("返回计算器")
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (plans.isNotEmpty()) {
+                        HistorySoftOutlinedButton(
+                            onClick = { showClearPlansConfirm = true },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("全部删除", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    HistorySoftOutlinedButton(
+                        onClick = onBack,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("返回计算器")
+                    }
                 }
             }
         }
@@ -236,7 +270,7 @@ fun HistoryScreen(
             HistoryCategoryButton(HistoryCategory.StopLossReverse.label, category == HistoryCategory.StopLossReverse, { category = HistoryCategory.StopLossReverse }, Modifier.weight(1f))
         }
         Text(
-            text = "有效计算会自动记录快照，详情直接读取保存时数据。",
+            text = "主动查看计算结果后会保存快照，详情直接读取保存时数据。",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -481,7 +515,7 @@ private fun EmptyHistoryState() {
         ) {
             Text("暂无历史记录", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
-                "完成一次有效计算后会自动记录快照",
+                "主动查看一次有效计算结果后会保存快照",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
@@ -527,7 +561,7 @@ private fun HistoryRecordRow(
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text("${if (record.favorite) "★ " else ""}${record.title}", fontWeight = FontWeight.Bold)
                 Text(
-                    "${record.summary}${record.roiSummary?.let { " · ROI $it" }.orEmpty()}",
+                    "${record.summary}${record.roiSummary?.let { " · 保证金收益率 $it" }.orEmpty()}",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(formatTimestamp(record.savedAt), style = MaterialTheme.typography.labelSmall)
@@ -591,7 +625,7 @@ private fun HistoryDetailScreen(
         Text("${record.category.label} · ${formatTimestamp(record.savedAt)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
         SectionPanel(title = "结果摘要") {
             HistoryDetailRow("净盈亏", record.summary)
-            record.roiSummary?.let { HistoryDetailRow("ROI", it) }
+            record.roiSummary?.let { HistoryDetailRow("保证金收益率（ROI）", it) }
             val fields = record.sections.flatMap { it.fields }.associate { it.label to it.value }
             fields["币种"]?.let { symbol ->
                 HistoryDetailRow(

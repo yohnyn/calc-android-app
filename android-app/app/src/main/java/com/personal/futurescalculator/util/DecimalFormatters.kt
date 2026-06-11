@@ -4,9 +4,9 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 
 object DecimalFormatters {
-    private const val CURRENCY_SCALE = 2
-    private const val PERCENTAGE_SCALE = 2
-    private const val QUANTITY_SCALE = 8
+    private const val CURRENCY_SCALE = 0
+    private const val PERCENTAGE_SCALE = 0
+    private const val QUANTITY_SCALE = 0
     
     fun formatCurrency(value: BigDecimal?): String {
         if (value == null) return "--"

@@ -2,12 +2,32 @@ package com.personal.futurescalculator.domain
 
 import com.personal.futurescalculator.model.CalculationInput
 import com.personal.futurescalculator.model.CalculationResult
+import com.personal.futurescalculator.model.MaxOpenResult
 import com.personal.futurescalculator.model.PositionSide
 import com.personal.futurescalculator.model.MarginMode
 import java.math.BigDecimal
 import java.math.RoundingMode
 
 class FuturesCalculator {
+    fun calculateMaxOpen(input: CalculationInput): MaxOpenResult? {
+        val totalFunds = input.totalFunds ?: return null
+        val entryPrice = input.entryPrice ?: return null
+        if (
+            !input.calculateMaxOpen ||
+            totalFunds <= BigDecimal.ZERO ||
+            entryPrice <= BigDecimal.ZERO ||
+            input.leverage < BigDecimal.ONE ||
+            input.leverage > BigDecimal("125")
+        ) {
+            return null
+        }
+        val positionValue = totalFunds.multiply(input.leverage)
+        return MaxOpenResult(
+            positionValue = positionValue,
+            quantity = positionValue.divide(entryPrice, DIVIDE_SCALE, RoundingMode.HALF_UP)
+        )
+    }
+
     fun calculate(input: CalculationInput): CalculationResult? {
         // 验证输入
         if (!isValidInput(input)) {

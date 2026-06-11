@@ -163,7 +163,7 @@ fun AveragingDecisionSection(
                 onClick = { showSchemeDialog = true },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("选择已有方案填入")
+                Text("从方案库选择")
             }
         }
         schemeFillMessage?.let { Text(text = it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -295,12 +295,12 @@ private fun SchemeSelectionDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "选择方案填入",
+                    text = "从方案库选择",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "选择后会填入当前持仓参数，仍可继续手动修改。",
+                    text = "选择后会带入方案库中的当前持仓参数。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -426,7 +426,7 @@ private fun AveragingDecisionResultCard(
                 AveragingInputRow {
                     AveragingMetricTile("新仓位价值", "${DecimalFormatters.formatCurrency(newPositionValue)} USDT", modifier = Modifier.weight(1f))
                     targetRoi?.let {
-                        AveragingMetricTile("ROI", DecimalFormatters.formatPercentage(it), modifier = Modifier.weight(1f))
+                        AveragingMetricTile("保证金收益率（ROI）", DecimalFormatters.formatPercentage(it), modifier = Modifier.weight(1f))
                     }
                 }
                 AveragingInputRow {

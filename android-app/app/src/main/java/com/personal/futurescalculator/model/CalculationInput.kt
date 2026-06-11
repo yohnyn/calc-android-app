@@ -20,5 +20,6 @@ data class CalculationInput(
     val maxLossRoiPercent: BigDecimal? = null,
     val maintenanceMarginRatePercent: BigDecimal = BigDecimal("0.5"),
     val totalFunds: BigDecimal? = null,
-    val estimateLiquidation: Boolean = false
+    val estimateLiquidation: Boolean = false,
+    val calculateMaxOpen: Boolean = false
 )

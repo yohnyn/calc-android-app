@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -26,7 +25,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -75,6 +73,7 @@ import com.personal.futurescalculator.ui.results.CoinMarginedResultDialog
 import com.personal.futurescalculator.ui.results.CompactExpandableResultCard
 import com.personal.futurescalculator.ui.results.EmptyResult
 import com.personal.futurescalculator.ui.results.MainResultDialog
+import com.personal.futurescalculator.ui.results.MetricTile
 import com.personal.futurescalculator.ui.results.pnlColor
 import com.personal.futurescalculator.ui.results.pnlText
 import com.personal.futurescalculator.ui.settings.CoinMarginedModeDialog
@@ -85,7 +84,6 @@ import com.personal.futurescalculator.util.ClipboardFormatter
 import com.personal.futurescalculator.util.DecimalFormatters
 import com.personal.futurescalculator.viewmodel.CalculatorViewModel
 import java.math.BigDecimal
-import kotlinx.coroutines.launch
 
 private const val RESULT_CARD_MAIN = "main"
 private const val RESULT_CARD_COIN = "coin"
@@ -98,7 +96,6 @@ fun CalculatorScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val scrollState = rememberScrollState()
-    val coroutineScope = rememberCoroutineScope()
     val futuresCalculator = remember { FuturesCalculator() }
     var showFeeSettings by rememberSaveable { mutableStateOf(false) }
     var showCoinSelector by rememberSaveable { mutableStateOf(false) }
@@ -121,9 +118,7 @@ fun CalculatorScreen(
     var pnlDisplayMode by rememberSaveable { mutableStateOf(PnlDisplayMode.ProfitGreen) }
     var feedbackText by rememberSaveable { mutableStateOf("") }
     var comparisonSectionExpanded by rememberSaveable { mutableStateOf(true) }
-    var targetProfitMode by rememberSaveable { mutableStateOf(true) }
     var targetPriceExpanded by rememberSaveable { mutableStateOf(false) }
-    var targetStopHighlightKey by rememberSaveable { mutableStateOf(0) }
     var lastProfitHistoryKey by rememberSaveable { mutableStateOf<String?>(null) }
     var lastAveragingHistoryKey by rememberSaveable { mutableStateOf<String?>(null) }
     val hasTargetStopPlan = uiState.input.takeProfitPrice != null ||
@@ -146,23 +141,8 @@ fun CalculatorScreen(
     }
     val selectedCoin = uiState.coins.firstOrNull { it.id == uiState.selectedCoinId }
     val averagingSchemes = buildList {
-        uiState.result?.takeIf { it.netPnl != null }?.let {
-            add(ExistingScheme("当前主方案", selectedCoin?.symbol ?: "币", uiState.input, it))
-        }
-        uiState.comparisonItems.forEachIndexed { index, item ->
-            uiState.comparisonResults.getOrNull(index)?.result?.takeIf { it.netPnl != null }?.let {
-                add(
-                    ExistingScheme(
-                        item.name,
-                        uiState.coins.firstOrNull { coin -> coin.id == item.coinId }?.symbol ?: "币",
-                        item.input,
-                        it
-                    )
-                )
-            }
-        }
         uiState.savedPlans.forEach { plan ->
-            futuresCalculator.calculate(plan.input)?.takeIf { it.netPnl != null }?.let { result ->
+            futuresCalculator.calculate(plan.input)?.let { result ->
                 add(
                     ExistingScheme(
                         plan.name,
@@ -205,7 +185,8 @@ fun CalculatorScreen(
         maxLossAmount = null,
         maxLossRoiPercent = null,
         totalFunds = null,
-        estimateLiquidation = false
+        estimateLiquidation = false,
+        calculateMaxOpen = false
     )
     val availableComparisonPlans = uiState.savedPlans.filterNot { plan ->
         plan.coinId == uiState.selectedCoinId &&
@@ -217,26 +198,7 @@ fun CalculatorScreen(
         focusManager.clearFocus(force = true)
         keyboardController?.hide()
     }
-    val submitMainResult: () -> Unit = {
-        hideKeyboardAndClearFocus()
-        when {
-            uiState.settlementMode == SettlementMode.UsdtMargined && uiState.result != null ->
-                showMainResultDialog = true
-            uiState.settlementMode == SettlementMode.CoinMargined && uiState.coinMarginedResult != null ->
-                showCoinMarginedResultDialog = true
-        }
-    }
-
-    LaunchedEffect(uiState.comparisonItems.map { it.id }) {
-        val validIds = uiState.comparisonItems.map { it.id }.toSet() + MAIN_SCHEME_ID
-        selectedComparisonIds = selectedComparisonIds.intersect(validIds)
-    }
-    LaunchedEffect(hasTargetStopPlan) {
-        if (hasTargetStopPlan) {
-            targetStopEnabled = true
-        }
-    }
-    LaunchedEffect(uiState.result?.netPnl, uiState.input.entryPrice, uiState.input.exitPrice, uiState.input.margin, uiState.input.quantity, uiState.settlementMode, selectedCoin?.symbol) {
+    val saveCurrentProfitHistory: () -> Unit = {
         val result = uiState.result
         if (uiState.settlementMode == SettlementMode.UsdtMargined && result?.netPnl != null) {
             val key = listOf(
@@ -263,7 +225,7 @@ fun CalculatorScreen(
             }
         }
     }
-    LaunchedEffect(uiState.averagingDecisionResult?.pnlChange, uiState.averagingDecisionInput) {
+    val saveCurrentAveragingHistory: () -> Unit = {
         val result = uiState.averagingDecisionResult
         if (result != null) {
             val key = listOf(
@@ -286,6 +248,27 @@ fun CalculatorScreen(
                     )
                 )
             }
+        }
+    }
+    val submitMainResult: () -> Unit = {
+        hideKeyboardAndClearFocus()
+        when {
+            uiState.settlementMode == SettlementMode.UsdtMargined && uiState.result != null -> {
+                saveCurrentProfitHistory()
+                showMainResultDialog = true
+            }
+            uiState.settlementMode == SettlementMode.CoinMargined && uiState.coinMarginedResult != null ->
+                showCoinMarginedResultDialog = true
+        }
+    }
+
+    LaunchedEffect(uiState.comparisonItems.map { it.id }) {
+        val validIds = uiState.comparisonItems.map { it.id }.toSet() + MAIN_SCHEME_ID
+        selectedComparisonIds = selectedComparisonIds.intersect(validIds)
+    }
+    LaunchedEffect(hasTargetStopPlan) {
+        if (hasTargetStopPlan) {
+            targetStopEnabled = true
         }
     }
     CompositionLocalProvider(LocalProfitLossPalette provides profitLossPalette) {
@@ -325,6 +308,11 @@ fun CalculatorScreen(
             },
             onAddPlanToComparison = viewModel::addSavedPlanToComparison,
             onDeletePlan = viewModel::deleteSavedPlan,
+            onClearPlans = {
+                viewModel.clearSavedPlans()
+                averagingSymbolOverride = null
+                selectedComparisonIds = setOf(MAIN_SCHEME_ID)
+            },
             onRenamePlan = viewModel::renameSavedPlan,
             onUpdatePlanNote = viewModel::updateSavedPlanNote,
             onDuplicatePlan = viewModel::duplicateSavedPlan,
@@ -512,116 +500,75 @@ fun CalculatorScreen(
                 amountInputMode = uiState.lastEditedAmountField,
                 targetStopEnabled = targetStopEnabled,
                 targetPriceExpanded = targetPriceExpanded,
-                targetStopHighlightKey = targetStopHighlightKey,
                 onCoinClick = { showCoinSelector = true },
                 onSettlementModeChange = viewModel::onContractModeChanged,
                 onTargetStopEnabledChange = { targetStopEnabled = it },
                 onTargetPriceExpandedChange = { targetPriceExpanded = it },
                 targetPriceContent = {
-                    TwoOptionModeSelector(
-                        firstText = "目标收益",
-                        secondText = "目标亏损",
-                        firstSelected = targetProfitMode,
-                        onFirstClick = {
-                            targetProfitMode = true
-                            viewModel.updateInput(
-                                uiState.input.copy(
-                                    maxLossAmount = null,
-                                    maxLossRoiPercent = null
-                                )
-                            )
-                        },
-                        onSecondClick = {
-                            targetProfitMode = false
-                            viewModel.updateInput(
-                                uiState.input.copy(
-                                    targetProfitAmount = null,
-                                    targetRoiPercent = null
-                                )
-                            )
-                        }
-                    )
-                    if (targetProfitMode) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
                         NumberInput(
                             value = uiState.input.targetProfitAmount,
                             onValueChange = {
                                 viewModel.updateInput(
                                     uiState.input.copy(
                                         targetProfitAmount = it,
-                                        targetRoiPercent = null,
-                                        maxLossAmount = null,
-                                        maxLossRoiPercent = null
+                                        targetRoiPercent = null
                                     )
                                 )
                             },
-                            label = "目标盈利 USDT"
+                            label = "目标收益 USDT",
+                            modifier = Modifier.weight(1f)
                         )
-                        uiState.result?.targetProfitPriceByAmount?.let { targetPrice ->
-                            TargetPriceResultCard(
-                                targetPrice = targetPrice,
-                                supportingText = "达到该价格时预计收益 ${DecimalFormatters.formatPositiveNegative(uiState.input.targetProfitAmount)} USDT",
-                                positive = true
-                            )
-                        }
-                        OutlinedButton(
-                            onClick = {
-                                val targetPrice = uiState.result?.targetProfitPriceByAmount ?: return@OutlinedButton
-                                targetStopEnabled = true
-                                targetStopHighlightKey += 1
-                                viewModel.updateInput(uiState.input.copy(takeProfitPrice = targetPrice))
-                                coroutineScope.launch { scrollState.animateScrollTo(0) }
-                                Toast.makeText(
-                                    context,
-                                    "已填入止盈价 ${DecimalFormatters.formatCurrency(targetPrice)}",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            },
-                            enabled = uiState.result?.targetProfitPriceByAmount != null,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = MaterialTheme.shapes.small
-                        ) {
-                            Text("填入止盈价")
-                        }
-                    } else {
                         NumberInput(
                             value = uiState.input.maxLossAmount,
                             onValueChange = {
                                 viewModel.updateInput(
                                     uiState.input.copy(
                                         maxLossAmount = it,
-                                        maxLossRoiPercent = null,
-                                        targetProfitAmount = null,
-                                        targetRoiPercent = null
+                                        maxLossRoiPercent = null
                                     )
                                 )
                             },
-                            label = "目标亏损 USDT"
+                            label = "目标亏损 USDT",
+                            modifier = Modifier.weight(1f)
                         )
-                        uiState.result?.stopLossPriceByAmount?.let { stopPrice ->
-                            TargetPriceResultCard(
-                                targetPrice = stopPrice,
-                                supportingText = "达到该价格时预计亏损 ${DecimalFormatters.formatPositiveNegative(uiState.input.maxLossAmount?.negate())} USDT",
-                                positive = false
-                            )
-                        }
-                        OutlinedButton(
-                            onClick = {
-                                val stopPrice = uiState.result?.stopLossPriceByAmount ?: return@OutlinedButton
-                                targetStopEnabled = true
-                                targetStopHighlightKey += 1
-                                viewModel.updateInput(uiState.input.copy(stopLossPrice = stopPrice))
-                                coroutineScope.launch { scrollState.animateScrollTo(0) }
-                                Toast.makeText(
-                                    context,
-                                    "已填入止损价 ${DecimalFormatters.formatCurrency(stopPrice)}",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            },
-                            enabled = uiState.result?.stopLossPriceByAmount != null,
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        MetricTile(
+                            label = "目标收益价格",
+                            value = "${DecimalFormatters.formatCurrency(uiState.result?.targetProfitPriceByAmount)} USDT",
+                            modifier = Modifier.weight(1f)
+                        )
+                        MetricTile(
+                            label = "目标亏损价格",
+                            value = "${DecimalFormatters.formatCurrency(uiState.result?.stopLossPriceByAmount)} USDT",
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                },
+                maxOpenContent = {
+                    uiState.maxOpenResult?.let { maxOpen ->
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = MaterialTheme.shapes.small
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text("填入止损价")
+                            MetricTile(
+                                label = "可开仓位",
+                                value = "${DecimalFormatters.formatCurrency(maxOpen.positionValue)} USDT",
+                                modifier = Modifier.weight(1f)
+                            )
+                            MetricTile(
+                                label = "可开数量",
+                                value = "${DecimalFormatters.formatQuantity(maxOpen.quantity)} ${selectedCoin?.symbol ?: "币"}",
+                                modifier = Modifier.weight(1f)
+                            )
                         }
                     }
                 },
@@ -631,29 +578,27 @@ fun CalculatorScreen(
             )
 
             if (uiState.settlementMode == SettlementMode.UsdtMargined && hasPnlResult) {
-                SectionPanel(title = "结果缩略") {
-                    CompactExpandableResultCard(
-                        label = "净盈亏 / ROI",
-                        value = "${pnlText(uiState.result!!.netPnl, DecimalFormatters.formatPositiveNegative(uiState.result!!.netPnl))} USDT · ${DecimalFormatters.formatPercentage(uiState.result!!.roiPercent)}",
-                        valueColor = pnlColor(uiState.result!!.netPnl),
-                        onClick = {
-                            hideKeyboardAndClearFocus()
-                            showMainResultDialog = true
-                        }
-                    )
-                }
+                val netPnl = uiState.result!!.netPnl
+                CompactExpandableResultCard(
+                    label = if (netPnl != null && netPnl < BigDecimal.ZERO) "净亏损" else "净盈利",
+                    value = "${pnlText(netPnl, DecimalFormatters.formatPositiveNegative(netPnl))} USDT  ·  ${DecimalFormatters.formatPositiveNegative(uiState.result!!.roiPercent)}%",
+                    valueColor = pnlColor(netPnl),
+                    onClick = {
+                        hideKeyboardAndClearFocus()
+                        saveCurrentProfitHistory()
+                        showMainResultDialog = true
+                    }
+                )
             } else if (uiState.settlementMode == SettlementMode.CoinMargined && uiState.coinMarginedResult != null) {
-                SectionPanel(title = "结果缩略") {
-                    CompactExpandableResultCard(
-                        label = "币本位盈亏 / 折算",
-                        value = "${DecimalFormatters.formatPositiveNegative(uiState.coinMarginedResult!!.pnlCoin)} ${selectedCoin?.symbol ?: "币"} · ${DecimalFormatters.formatPositiveNegative(uiState.coinMarginedResult!!.estimatedValueUsdt)} USDT",
-                        valueColor = pnlColor(uiState.coinMarginedResult!!.pnlCoin),
-                        onClick = {
-                            hideKeyboardAndClearFocus()
-                            showCoinMarginedResultDialog = true
-                        }
-                    )
-                }
+                CompactExpandableResultCard(
+                    label = "结果缩略 · 币本位盈亏 / 折算",
+                    value = "${DecimalFormatters.formatPositiveNegative(uiState.coinMarginedResult!!.pnlCoin)} ${selectedCoin?.symbol ?: "币"} · ${DecimalFormatters.formatPositiveNegative(uiState.coinMarginedResult!!.estimatedValueUsdt)} USDT",
+                    valueColor = pnlColor(uiState.coinMarginedResult!!.pnlCoin),
+                    onClick = {
+                        hideKeyboardAndClearFocus()
+                        showCoinMarginedResultDialog = true
+                    }
+                )
             }
 
             SectionPanel(
@@ -667,7 +612,13 @@ fun CalculatorScreen(
                     }
                 }
             ) {
-                if (!mainComparisonComplete) {
+                if (!comparisonSectionExpanded) {
+                    Text(
+                        text = "共 ${comparisonSchemes.size} 个方案，点击展开继续编辑或查看对比。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else if (!mainComparisonComplete) {
                     Text(
                         text = "完成主方案参数后可对比",
                         style = MaterialTheme.typography.bodyMedium,
@@ -700,13 +651,6 @@ fun CalculatorScreen(
                         }
                     }
                     return@SectionPanel
-                }
-                if (!comparisonSectionExpanded) {
-                    Text(
-                        text = "共 ${comparisonSchemes.size} 个方案，点击展开继续编辑或查看对比。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 } else {
                     Text(
                         text = "选择对比",
@@ -824,6 +768,7 @@ fun CalculatorScreen(
                         } else if (missing.isNotEmpty()) {
                             averagingValidationMessage = missing.joinToString("、")
                         } else {
+                            saveCurrentAveragingHistory()
                             showAveragingResultDialog = true
                         }
                     }
@@ -887,44 +832,6 @@ private fun InputRow(content: @Composable RowScope.() -> Unit) {
 }
 
 @Composable
-private fun TargetPriceResultCard(
-    targetPrice: BigDecimal,
-    supportingText: String,
-    positive: Boolean
-) {
-    val palette = LocalProfitLossPalette.current
-    val accent = if (positive) palette.profit else palette.loss
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.small,
-        color = accent.copy(alpha = 0.10f),
-        border = BorderStroke(1.dp, accent.copy(alpha = 0.30f))
-    ) {
-        Column(
-            modifier = Modifier.padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(
-                text = "目标价格",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = "${DecimalFormatters.formatCurrency(targetPrice)} USDT",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = accent
-            )
-            Text(
-                text = supportingText,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Composable
 private fun SoftOutlinedButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -950,36 +857,4 @@ private fun SoftOutlinedButton(
         ),
         content = content
     )
-}
-
-@Composable
-private fun TwoOptionModeSelector(
-    firstText: String,
-    secondText: String,
-    firstSelected: Boolean,
-    onFirstClick: () -> Unit,
-    onSecondClick: () -> Unit
-) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(
-            onClick = onFirstClick,
-            modifier = Modifier.weight(1f).height(34.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (firstSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = if (firstSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-            ),
-            shape = MaterialTheme.shapes.small
-        ) { Text(firstText) }
-        Button(
-            onClick = onSecondClick,
-            modifier = Modifier.weight(1f).height(34.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (!firstSelected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = if (!firstSelected) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurfaceVariant
-            ),
-            shape = MaterialTheme.shapes.small
-        ) { Text(secondText) }
-    }
 }

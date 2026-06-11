@@ -6,6 +6,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,7 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -215,54 +216,57 @@ fun LeverageSelector(
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Surface(
-            modifier = Modifier.fillMaxWidth().height(40.dp).clickable { expanded = true },
-            shape = MaterialTheme.shapes.small,
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().height(40.dp).clickable { expanded = true },
+                shape = MaterialTheme.shapes.small,
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
             ) {
-                Text(
-                    text = if (selectedIsPreset) selectedLeverage else "${leverage.stripTrailingZeros().toPlainString()}x",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                DropdownChevronIcon()
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (selectedIsPreset) selectedLeverage else "${leverage.stripTrailingZeros().toPlainString()}x",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    DropdownChevronIcon(iconSize = 16.dp)
+                }
             }
-        }
-        AppDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            leverageOptions.forEach { option ->
+            AppDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.width(maxWidth)
+            ) {
+                leverageOptions.forEach { option ->
+                    DropdownMenuItem(
+                        text = { AppDropdownMenuText(option) },
+                        onClick = {
+                            expanded = false
+                            onLeverageChange(BigDecimal(option.removeSuffix("x")))
+                        },
+                        contentPadding = AppDropdownMenuItemPadding
+                    )
+                }
                 DropdownMenuItem(
-                    text = { AppDropdownMenuText(option) },
+                    text = { AppDropdownMenuText("自定义") },
                     onClick = {
                         expanded = false
-                        onLeverageChange(BigDecimal(option.removeSuffix("x")))
+                        showCustomDialog = true
+                        customText = leverage.stripTrailingZeros().toPlainString()
                     },
                     contentPadding = AppDropdownMenuItemPadding
                 )
             }
-            DropdownMenuItem(
-                text = { AppDropdownMenuText("自定义") },
-                onClick = {
-                    expanded = false
-                    showCustomDialog = true
-                    customText = leverage.stripTrailingZeros().toPlainString()
-                },
-                contentPadding = AppDropdownMenuItemPadding
-            )
         }
     }
 }
 
-val AppDropdownMenuItemPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp)
+val AppDropdownMenuItemPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
 
 @Composable
 fun AppDropdownMenu(
@@ -274,11 +278,11 @@ fun AppDropdownMenu(
     DropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismissRequest,
-        modifier = modifier.widthIn(min = 150.dp),
+        modifier = modifier,
         shape = MaterialTheme.shapes.small,
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
-        shadowElevation = 3.dp,
+        shadowElevation = 2.dp,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f)),
         content = content
     )

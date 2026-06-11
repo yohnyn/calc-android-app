@@ -37,7 +37,8 @@ fun ComparisonItem.toSavedPlan(createdAt: Long = System.currentTimeMillis()): Sa
         maxLossAmount = null,
         maxLossRoiPercent = null,
         totalFunds = null,
-        estimateLiquidation = false
+        estimateLiquidation = false,
+        calculateMaxOpen = false
     ),
     lastEditedAmountField = lastEditedAmountField,
     note = "",

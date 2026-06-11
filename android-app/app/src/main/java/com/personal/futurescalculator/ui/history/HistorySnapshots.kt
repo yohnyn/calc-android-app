@@ -45,7 +45,7 @@ fun createProfitHistorySnapshot(
             add(HistoryField("仓位价值", "${DecimalFormatters.formatCurrency(result.positionValue)} USDT"))
             add(HistoryField("手续费估算", "${DecimalFormatters.formatCurrency(result.totalFee)} USDT"))
             add(HistoryField("净盈亏", "${DecimalFormatters.formatPositiveNegative(result.netPnl)} USDT"))
-            add(HistoryField("ROI", DecimalFormatters.formatPercentage(result.roiPercent)))
+            add(HistoryField("保证金收益率（ROI）", DecimalFormatters.formatPercentage(result.roiPercent)))
             if (input.estimateLiquidation && result.liquidationPrice != null) {
                 add(HistoryField("强平价格", "${DecimalFormatters.formatCurrency(result.liquidationPrice)} USDT"))
                 add(HistoryField("距离强平", DecimalFormatters.formatPercentage(result.distanceToLiquidationPercent)))

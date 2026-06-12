@@ -34,4 +34,16 @@ object DecimalFormatters {
             .stripTrailingZeros()
             .toPlainString()
     }
+
+    fun formatPositionQuantity(value: BigDecimal?): String {
+        if (value == null) return "--"
+        return value.setScale(3, RoundingMode.HALF_UP).toPlainString()
+    }
+
+    fun formatDetailedQuantity(value: BigDecimal?): String {
+        if (value == null) return "--"
+        return value.setScale(6, RoundingMode.HALF_UP)
+            .stripTrailingZeros()
+            .toPlainString()
+    }
 }

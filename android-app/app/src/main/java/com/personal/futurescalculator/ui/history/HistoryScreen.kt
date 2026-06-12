@@ -64,6 +64,7 @@ fun HistoryScreen(
     onClearCategory: (HistoryCategory?) -> Unit,
     onOpenPlan: (SavedPlan) -> Unit,
     onAddPlanToComparison: (SavedPlan) -> Unit,
+    onSendPlanToAveraging: (SavedPlan) -> Unit,
     onDeletePlan: (String) -> Unit,
     onClearPlans: () -> Unit,
     onRenamePlan: (String, String) -> Unit,
@@ -156,7 +157,7 @@ fun HistoryScreen(
         AlertDialog(
             onDismissRequest = { showClearPlansConfirm = false },
             title = { Text("删除全部方案？") },
-            text = { Text("全部方案及已加入首页的对比方案将被删除，且无法恢复。") },
+            text = { Text("全部方案、由方案带入的首页参数、对比方案与补仓数据将被删除，且无法恢复。") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -245,14 +246,15 @@ fun HistoryScreen(
             PlanLibrarySection(
                 plans = plans,
                 coins = coins,
-            onOpenPlan = onOpenPlan,
-            onAddPlanToComparison = onAddPlanToComparison,
-            onDeletePlan = onDeletePlan,
-            onRenamePlan = onRenamePlan,
-            onUpdatePlanNote = onUpdatePlanNote,
-            onDuplicatePlan = onDuplicatePlan,
-            onBack = onBack
-        )
+                onOpenPlan = onOpenPlan,
+                onAddPlanToComparison = onAddPlanToComparison,
+                onSendPlanToAveraging = onSendPlanToAveraging,
+                onDeletePlan = onDeletePlan,
+                onRenamePlan = onRenamePlan,
+                onUpdatePlanNote = onUpdatePlanNote,
+                onDuplicatePlan = onDuplicatePlan,
+                onBack = onBack
+            )
             return@HistoryPageLayout
         }
         if (records.isEmpty()) {
@@ -317,6 +319,7 @@ private fun PlanLibrarySection(
     coins: List<CoinAsset>,
     onOpenPlan: (SavedPlan) -> Unit,
     onAddPlanToComparison: (SavedPlan) -> Unit,
+    onSendPlanToAveraging: (SavedPlan) -> Unit,
     onDeletePlan: (String) -> Unit,
     onRenamePlan: (String, String) -> Unit,
     onUpdatePlanNote: (String, String) -> Unit,
@@ -472,6 +475,12 @@ private fun PlanLibrarySection(
                         Text("加入对比")
                     }
                 }
+                HistorySoftOutlinedButton(
+                    onClick = { onSendPlanToAveraging(plan) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("带入补仓助手")
+                }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = {
                         renameText = plan.name
@@ -562,7 +571,9 @@ private fun HistoryRecordRow(
                 Text("${if (record.favorite) "★ " else ""}${record.title}", fontWeight = FontWeight.Bold)
                 Text(
                     "${record.summary}${record.roiSummary?.let { " · 保证金收益率 $it" }.orEmpty()}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(formatTimestamp(record.savedAt), style = MaterialTheme.typography.labelSmall)
             }
@@ -624,8 +635,8 @@ private fun HistoryDetailScreen(
         Text(record.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text("${record.category.label} · ${formatTimestamp(record.savedAt)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
         SectionPanel(title = "结果摘要") {
-            HistoryDetailRow("净盈亏", record.summary)
-            record.roiSummary?.let { HistoryDetailRow("保证金收益率（ROI）", it) }
+            HistoryDetailRow("净盈亏", record.summary, emphasized = true)
+            record.roiSummary?.let { HistoryDetailRow("保证金收益率（ROI）", it, emphasized = true) }
             val fields = record.sections.flatMap { it.fields }.associate { it.label to it.value }
             fields["币种"]?.let { symbol ->
                 HistoryDetailRow(
@@ -638,7 +649,7 @@ private fun HistoryDetailScreen(
             }
         }
         TextButton(onClick = { showFullParams = !showFullParams }, modifier = Modifier.fillMaxWidth()) {
-            Text(if (showFullParams) "收起完整记录 ▲" else "查看完整记录 ▼", fontWeight = FontWeight.SemiBold)
+            Text(if (showFullParams) "收起完整记录" else "查看完整记录", fontWeight = FontWeight.SemiBold)
         }
         if (showFullParams) {
             record.sections.forEach { section ->
@@ -671,10 +682,24 @@ private fun HistoryDetailScreen(
 }
 
 @Composable
-private fun HistoryDetailRow(label: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End, modifier = Modifier.weight(1f).padding(start = 12.dp))
+private fun HistoryDetailRow(label: String, value: String, emphasized: Boolean = false) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            label,
+            style = if (emphasized) MaterialTheme.typography.labelLarge else MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            value,
+            style = if (emphasized) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium,
+            fontWeight = if (emphasized) FontWeight.Bold else FontWeight.SemiBold,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f).padding(start = 12.dp)
+        )
     }
 }
 

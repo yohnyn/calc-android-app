@@ -62,28 +62,30 @@ fun createAveragingHistorySnapshot(
     id = "history_${System.currentTimeMillis()}",
     category = HistoryCategory.AveragingSimulation,
     title = "$symbol 补仓模拟",
-    summary = "${DecimalFormatters.formatPositiveNegative(result.pnlChange)} USDT",
+    summary = result.pnlChange?.let { "${DecimalFormatters.formatPositiveNegative(it)} USDT" }
+        ?: "均价改善 ${DecimalFormatters.formatCurrency(result.averagePriceImprovement)} USDT",
     roiSummary = null,
     savedAt = System.currentTimeMillis(),
     sections = listOf(
         HistorySection("详细数据", listOf(
             HistoryField("方向", input.side.label()),
             HistoryField("当前均价", "${DecimalFormatters.formatCurrency(input.currentEntryPrice)} USDT"),
-            HistoryField("当前数量", "${DecimalFormatters.formatQuantity(input.currentQuantity)} $symbol"),
+            HistoryField("当前数量", "${DecimalFormatters.formatDetailedQuantity(input.currentQuantity)} $symbol"),
             HistoryField("当前保证金", "${DecimalFormatters.formatCurrency(input.currentMargin)} USDT"),
             HistoryField("当前杠杆", "${DecimalFormatters.formatQuantity(input.currentLeverage)}x"),
             HistoryField("补仓价格", "${DecimalFormatters.formatCurrency(input.addEntryPrice)} USDT"),
             HistoryField("补仓金额", "${DecimalFormatters.formatCurrency(result.addAmount)} USDT"),
-            HistoryField("补仓数量", "${DecimalFormatters.formatQuantity(result.quantityIncrease)} $symbol"),
-            HistoryField("目标平仓价", "${DecimalFormatters.formatCurrency(input.targetExitPrice)} USDT")
+            HistoryField("补仓数量", "${DecimalFormatters.formatDetailedQuantity(result.quantityIncrease)} $symbol"),
+            HistoryField("目标平仓价", input.targetExitPrice?.let { "${DecimalFormatters.formatCurrency(it)} USDT" } ?: "未填写")
         )),
-        HistorySection("保存时结果", listOf(
-            HistoryField("补仓后均价", "${DecimalFormatters.formatCurrency(result.newAveragePrice)} USDT"),
-            HistoryField("补仓后总仓位", "${DecimalFormatters.formatQuantity(result.newQuantity)} $symbol"),
-            HistoryField("补仓前收益", "${DecimalFormatters.formatPositiveNegative(result.pnlWithoutAdding)} USDT"),
-            HistoryField("补仓后收益", "${DecimalFormatters.formatPositiveNegative(result.pnlAfterAdding)} USDT"),
-            HistoryField("收益变化", "${DecimalFormatters.formatPositiveNegative(result.pnlChange)} USDT")
-        ))
+        HistorySection("保存时结果", buildList {
+            add(HistoryField("补仓后均价", "${DecimalFormatters.formatCurrency(result.newAveragePrice)} USDT"))
+            add(HistoryField("补仓后总仓位", "${DecimalFormatters.formatDetailedQuantity(result.newQuantity)} $symbol"))
+            add(HistoryField("均价改善", "${DecimalFormatters.formatCurrency(result.averagePriceImprovement)} USDT"))
+            result.pnlWithoutAdding?.let { add(HistoryField("补仓前收益", "${DecimalFormatters.formatPositiveNegative(it)} USDT")) }
+            result.pnlAfterAdding?.let { add(HistoryField("补仓后收益", "${DecimalFormatters.formatPositiveNegative(it)} USDT")) }
+            result.pnlChange?.let { add(HistoryField("收益变化", "${DecimalFormatters.formatPositiveNegative(it)} USDT")) }
+        })
     )
 )
 

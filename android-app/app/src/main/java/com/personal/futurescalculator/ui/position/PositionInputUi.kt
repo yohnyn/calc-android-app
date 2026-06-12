@@ -20,6 +20,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -64,6 +65,7 @@ fun PositionInputSection(
     targetPriceExpanded: Boolean,
     targetStopHighlightKey: Int = 0,
     onCoinClick: () -> Unit,
+    onClearClick: () -> Unit,
     onSettlementModeChange: (SettlementMode) -> Unit,
     onTargetStopEnabledChange: (Boolean) -> Unit,
     onTargetPriceExpandedChange: (Boolean) -> Unit,
@@ -96,6 +98,21 @@ fun PositionInputSection(
             modifier = Modifier.padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "仓位参数",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                TextButton(onClick = onClearClick) {
+                    Text("清空参数", fontWeight = FontWeight.SemiBold)
+                }
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -140,8 +157,7 @@ fun PositionInputSection(
                 Column(modifier = Modifier.weight(1.35f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
                         text = amountTitle(settlementMode, amountInputMode, coinMarginedCalculationMode),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     if (settlementMode == SettlementMode.UsdtMargined) {
@@ -473,7 +489,10 @@ fun AmountUnitInput(
                             onSubmit()
                         }
                     ),
-                    textStyle = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurface)
+                    textStyle = MaterialTheme.typography.titleMedium.copy(
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 )
                 Surface(
                     modifier = Modifier.height(22.dp),
@@ -491,9 +510,9 @@ fun AmountUnitInput(
                 ) {
                     Text(
                         text = selectedUnit,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     if (unitSelectable) {
                         DropdownChevronIcon(iconSize = 16.dp)

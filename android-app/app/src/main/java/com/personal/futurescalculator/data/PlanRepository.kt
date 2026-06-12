@@ -75,6 +75,10 @@ class PlanRepository(context: Context) {
         closeFeeRatePercent = json.optDecimal("close_fee_rate") ?: BigDecimal("0.05"),
         takeProfitPrice = json.optDecimal("take_profit_price"),
         stopLossPrice = json.optDecimal("stop_loss_price"),
+        targetProfitAmount = json.optDecimal("target_profit_amount"),
+        targetRoiPercent = json.optDecimal("target_roi_percent"),
+        maxLossAmount = json.optDecimal("max_loss_amount"),
+        maxLossRoiPercent = json.optDecimal("max_loss_roi_percent"),
         maintenanceMarginRatePercent = json.optDecimal("maintenance_margin_rate") ?: BigDecimal("0.5"),
         totalFunds = json.optDecimal("total_funds"),
         estimateLiquidation = json.optBoolean("estimate_liquidation", false),
@@ -93,6 +97,10 @@ class PlanRepository(context: Context) {
         .putDecimal("close_fee_rate", input.closeFeeRatePercent)
         .putDecimal("take_profit_price", input.takeProfitPrice)
         .putDecimal("stop_loss_price", input.stopLossPrice)
+        .putDecimal("target_profit_amount", input.targetProfitAmount)
+        .putDecimal("target_roi_percent", input.targetRoiPercent)
+        .putDecimal("max_loss_amount", input.maxLossAmount)
+        .putDecimal("max_loss_roi_percent", input.maxLossRoiPercent)
         .putDecimal("maintenance_margin_rate", input.maintenanceMarginRatePercent)
         .putDecimal("total_funds", input.totalFunds)
         .put("estimate_liquidation", input.estimateLiquidation)

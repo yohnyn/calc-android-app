@@ -11,15 +11,13 @@ class AveragingDecisionCalculator {
         val currentEntryPrice = input.currentEntryPrice ?: return null
         val currentQuantity = input.currentQuantity ?: return null
         val addEntryPrice = input.addEntryPrice ?: return null
-        val targetExitPrice = input.targetExitPrice ?: return null
         val leverage = input.currentLeverage ?: BigDecimal.ONE
 
         if (
             currentEntryPrice <= BigDecimal.ZERO ||
             currentQuantity <= BigDecimal.ZERO ||
             addEntryPrice <= BigDecimal.ZERO ||
-            (input.addAmount != null && leverage <= BigDecimal.ZERO) ||
-            targetExitPrice <= BigDecimal.ZERO
+            (input.addAmount != null && leverage <= BigDecimal.ZERO)
         ) {
             return null
         }
@@ -44,15 +42,23 @@ class AveragingDecisionCalculator {
         val newQuantity = currentQuantity + addQuantity
         val newAveragePrice = (currentEntryPrice * currentQuantity + addEntryPrice * addQuantity)
             .divide(newQuantity, DIVIDE_SCALE, RoundingMode.HALF_UP)
-        val pnlWithoutAdding = calculatePnl(input.side, currentEntryPrice, targetExitPrice, currentQuantity)
-        val pnlAfterAdding = calculatePnl(input.side, newAveragePrice, targetExitPrice, newQuantity)
+        val pnlWithoutAdding = input.targetExitPrice?.takeIf { it > BigDecimal.ZERO }?.let {
+            calculatePnl(input.side, currentEntryPrice, it, currentQuantity)
+        }
+        val pnlAfterAdding = input.targetExitPrice?.takeIf { it > BigDecimal.ZERO }?.let {
+            calculatePnl(input.side, newAveragePrice, it, newQuantity)
+        }
 
         return AveragingDecisionResult(
             newAveragePrice = newAveragePrice,
             newQuantity = newQuantity,
             pnlWithoutAdding = pnlWithoutAdding,
             pnlAfterAdding = pnlAfterAdding,
-            pnlChange = pnlAfterAdding - pnlWithoutAdding,
+            pnlChange = if (pnlAfterAdding != null && pnlWithoutAdding != null) {
+                pnlAfterAdding - pnlWithoutAdding
+            } else {
+                null
+            },
             averagePriceImprovement = if (input.side == PositionSide.Long) {
                 currentEntryPrice - newAveragePrice
             } else {

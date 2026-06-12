@@ -278,16 +278,14 @@ class FuturesCalculator {
                 estimatedPrice.takeIf { it > BigDecimal.ZERO }
             }
         } else {
-            // 逐仓简化估算：强平时，仓位权益等于按强平价计算的维持保证金。
+            // 逐仓简化估算，保持与产品规范中的展示公式一致。
             val leverageRate = BigDecimal.ONE.divide(input.leverage, DIVIDE_SCALE, RoundingMode.HALF_UP)
             if (input.side == PositionSide.Long) {
                 input.entryPrice
-                    .multiply(BigDecimal.ONE - leverageRate)
-                    .divide(BigDecimal.ONE - maintenanceMarginRate, DIVIDE_SCALE, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.ONE - leverageRate + maintenanceMarginRate)
             } else {
                 input.entryPrice
-                    .multiply(BigDecimal.ONE + leverageRate)
-                    .divide(BigDecimal.ONE + maintenanceMarginRate, DIVIDE_SCALE, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.ONE + leverageRate - maintenanceMarginRate)
             }
         }
     }

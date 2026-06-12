@@ -16,6 +16,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -48,6 +49,8 @@ fun MainResultDialog(
     result: CalculationResult,
     symbol: String,
     onShowFeeSettings: () -> Unit,
+    onCopyResult: () -> Unit,
+    onSimulateAveraging: () -> Unit,
     onDismiss: () -> Unit
 ) {
     var showInputDetails by rememberSaveable { mutableStateOf(true) }
@@ -78,6 +81,8 @@ fun MainResultDialog(
                             input = input,
                             symbol = symbol,
                             settlementMode = SettlementMode.UsdtMargined,
+                            positionMargin = result.requiredMargin,
+                            positionQuantity = result.quantity,
                             showSection = false,
                             onShowFeeSettings = onShowFeeSettings
                         )
@@ -113,6 +118,20 @@ fun MainResultDialog(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
+                OutlinedButton(
+                    onClick = onCopyResult,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.small
+                ) {
+                    Text("复制计算结果")
+                }
+                OutlinedButton(
+                    onClick = onSimulateAveraging,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.small
+                ) {
+                    Text("模拟补仓")
                 }
                 Button(
                     onClick = onDismiss,
@@ -151,7 +170,7 @@ fun CoinMarginedResultDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        if (showInputDetails) "收起交易参数 ▲" else "查看交易参数 ▼",
+                        if (showInputDetails) "收起交易参数" else "查看交易参数",
                         fontWeight = FontWeight.SemiBold
                     )
                 }
@@ -189,11 +208,25 @@ private fun MainOrderedResultSection(input: CalculationInput, result: Calculatio
                         value = pnlText(result.roiPercent, DecimalFormatters.formatPercentage(result.roiPercent)),
                         color = pnlColor(result.netPnl)
                     )
-                    result.takeProfitNetPnl?.let {
-                        ResultPrimaryMetric("止盈收益", "${DecimalFormatters.formatPositiveNegative(it)} USDT", palette.profit)
-                    }
-                    result.stopLossNetPnl?.let {
-                        ResultPrimaryMetric("止损亏损", "${DecimalFormatters.formatPositiveNegative(it)} USDT", palette.loss)
+                    if (result.takeProfitNetPnl != null || result.stopLossNetPnl != null) {
+                        ResultInputRow {
+                            result.takeProfitNetPnl?.let {
+                                MetricTile(
+                                    label = "止盈收益",
+                                    value = "${DecimalFormatters.formatPositiveNegative(it)} USDT",
+                                    valueColor = palette.profit,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            result.stopLossNetPnl?.let {
+                                MetricTile(
+                                    label = "止损亏损",
+                                    value = "${DecimalFormatters.formatPositiveNegative(it)} USDT",
+                                    valueColor = palette.loss,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
                     }
                 } else {
                     ResultPrimaryMetric(
@@ -422,14 +455,17 @@ private fun CalculationInputDetails(
     input: CalculationInput,
     symbol: String,
     settlementMode: SettlementMode,
+    positionMargin: BigDecimal? = null,
+    positionQuantity: BigDecimal? = null,
     showSection: Boolean = true,
     onShowFeeSettings: (() -> Unit)? = null
 ) {
     val content: @Composable () -> Unit = {
         Text(
             text = "${input.side.label()} · ${input.marginMode.label()} · ${input.leverage.stripTrailingZeros().toPlainString()}x · ${if (settlementMode == SettlementMode.UsdtMargined) "U 本位" else "币本位"}",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         ResultInputRow {
             MetricTile(
@@ -445,13 +481,15 @@ private fun CalculationInputDetails(
         }
         ResultInputRow {
             MetricTile(
-                label = "输入保证金",
-                value = input.margin?.let { "${DecimalFormatters.formatCurrency(it)} USDT" } ?: "未填写",
+                label = "当前仓位保证金",
+                value = (positionMargin ?: input.margin)?.let { "${DecimalFormatters.formatCurrency(it)} USDT" }
+                    ?: "未计算",
                 modifier = Modifier.weight(1f)
             )
             MetricTile(
-                label = "输入币数量",
-                value = input.quantity?.let { "${DecimalFormatters.formatQuantity(it)} $symbol" } ?: "未填写",
+                label = "仓位币数量（按开仓价）",
+                value = (positionQuantity ?: input.quantity)?.let { "${DecimalFormatters.formatPositionQuantity(it)} $symbol" }
+                    ?: "未计算",
                 modifier = Modifier.weight(1f)
             )
         }
@@ -500,28 +538,77 @@ fun CompactExpandableResultCard(
     value: String,
     valueColor: Color,
     enabled: Boolean = true,
+    actionText: String? = null,
+    onActionClick: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick),
+        modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.small,
         color = valueColor.copy(alpha = 0.10f),
         border = BorderStroke(1.dp, valueColor.copy(alpha = 0.38f))
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = enabled, onClick = onClick)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = valueColor)
             }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (actionText != null && onActionClick != null) {
+                    ResultCardAction(
+                        text = actionText,
+                        onClick = onActionClick,
+                        modifier = Modifier.weight(1f),
+                        emphasized = false
+                    )
+                }
+                ResultCardAction(
+                    text = "查看详情",
+                    onClick = onClick,
+                    modifier = Modifier.weight(1f),
+                    emphasized = true
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ResultCardAction(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier,
+    emphasized: Boolean
+) {
+    Surface(
+        modifier = modifier.clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.small,
+        color = if (emphasized) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+        else MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+        border = BorderStroke(
+            1.dp,
+            if (emphasized) MaterialTheme.colorScheme.primary.copy(alpha = 0.42f)
+            else MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
+        )
+    ) {
+        Box(modifier = Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
             Text(
-                "查看详情",
+                text = text,
                 style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+                fontWeight = FontWeight.SemiBold,
+                color = if (emphasized) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

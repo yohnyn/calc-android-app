@@ -24,7 +24,9 @@ object ClipboardFormatter {
                 appendLine("平仓价：${DecimalFormatters.formatCurrency(input.exitPrice)} USDT")
                 appendLine("保证金：${DecimalFormatters.formatCurrency(result?.requiredMargin)} USDT")
                 appendLine("净盈亏：${DecimalFormatters.formatPositiveNegative(result?.netPnl)} USDT")
-                append("保证金收益率（ROI）：${DecimalFormatters.formatPercentage(result?.roiPercent)}")
+                appendLine("保证金收益率（ROI）：${DecimalFormatters.formatPercentage(result?.roiPercent)}")
+                appendLine()
+                append("说明：仅为本地计算结果，不构成交易依据。")
             }
         }
         return buildString {
@@ -38,6 +40,14 @@ object ClipboardFormatter {
             appendLine("【价格】")
             appendLine("开仓价：${DecimalFormatters.formatCurrency(input.entryPrice)} USDT")
             appendLine("平仓价：${DecimalFormatters.formatCurrency(input.exitPrice)} USDT")
+            input.takeProfitPrice?.let {
+                appendLine("止盈价：${DecimalFormatters.formatCurrency(it)} USDT")
+                appendLine("止盈收益：${DecimalFormatters.formatPositiveNegative(result?.takeProfitNetPnl)} USDT")
+            }
+            input.stopLossPrice?.let {
+                appendLine("止损价：${DecimalFormatters.formatCurrency(it)} USDT")
+                appendLine("止损亏损：${DecimalFormatters.formatPositiveNegative(result?.stopLossNetPnl)} USDT")
+            }
             appendLine()
             appendLine("【结果】")
             appendLine("净盈亏：${DecimalFormatters.formatPositiveNegative(result?.netPnl)} USDT")
@@ -48,9 +58,9 @@ object ClipboardFormatter {
         }
     }
 
-    fun formatComparisonSummary(schemes: List<ComparisonSchemeView>): String {
+    fun formatComparisonSummary(schemes: List<ComparisonSchemeView>, baselineId: String): String {
         val ordered = schemes.filter { it.comparablePnlUsdt() != null }
-        val main = ordered.firstOrNull { it.isMain } ?: ordered.firstOrNull()
+        val main = ordered.firstOrNull { it.id == baselineId } ?: ordered.firstOrNull()
         return buildString {
             appendLine("【开仓方案对比】")
             if (main != null) {
@@ -79,10 +89,11 @@ object ClipboardFormatter {
         appendLine("回本价：${DecimalFormatters.formatCurrency(result.newAveragePrice)}")
         input.targetExitPrice?.let {
             appendLine("目标价收益：${DecimalFormatters.formatPositiveNegative(result.pnlAfterAdding)} USDT")
+            appendLine("相比不补仓：${DecimalFormatters.formatPositiveNegative(result.pnlChange)} USDT")
         }
-        appendLine("相比不补仓：${DecimalFormatters.formatPositiveNegative(result.pnlChange)} USDT")
+        appendLine("均价改善：${DecimalFormatters.formatCurrency(result.averagePriceImprovement)} USDT")
         appendLine()
-        append("说明：仅表示目标价下的收益差值。")
+        append("说明：目标价收益仅在填写目标平仓价时提供。")
     }
 
     private fun PositionSide.label(): String = if (this == PositionSide.Long) "做多" else "做空"

@@ -212,8 +212,7 @@ fun LeverageSelector(
     ) {
         Text(
             text = "杠杆",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
@@ -230,7 +229,7 @@ fun LeverageSelector(
                 ) {
                     Text(
                         text = if (selectedIsPreset) selectedLeverage else "${leverage.stripTrailingZeros().toPlainString()}x",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -397,7 +396,10 @@ fun NumberInput(
             ),
             keyboardActions = KeyboardActions(onDone = { finishInput() }),
             singleLine = true,
-            textStyle = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurface),
+            textStyle = MaterialTheme.typography.titleMedium.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold
+            ),
             decorationBox = { innerTextField ->
                 Surface(
                     modifier = Modifier
@@ -451,7 +453,10 @@ fun CompactTextInput(
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { finishInput() }),
-            textStyle = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurface),
+            textStyle = MaterialTheme.typography.titleMedium.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold
+            ),
             decorationBox = { innerTextField ->
                 Surface(
                     modifier = Modifier.fillMaxWidth().height(40.dp),

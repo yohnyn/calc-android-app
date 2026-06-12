@@ -11,15 +11,19 @@ import com.personal.futurescalculator.model.AveragingDecisionInput
 import com.personal.futurescalculator.model.CalculationInput
 import com.personal.futurescalculator.model.CoinMarginedCalculationMode
 import com.personal.futurescalculator.model.ComparisonItem
+import com.personal.futurescalculator.model.CopyFormat
 import com.personal.futurescalculator.model.MarginMode
 import com.personal.futurescalculator.model.PositionSide
 import com.personal.futurescalculator.model.SettlementMode
+import com.personal.futurescalculator.model.toSavedPlan
+import com.personal.futurescalculator.util.ClipboardFormatter
 import com.personal.futurescalculator.viewmodel.normalizeAmountFields
 import java.math.BigDecimal
 import java.math.RoundingMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FuturesCalculatorTest {
@@ -29,6 +33,77 @@ class FuturesCalculatorTest {
     @Test
     fun returnsNoResultWithoutEntryPrice() {
         assertNull(calculator.calculate(CalculationInput()))
+    }
+
+    @Test
+    fun isolatedLiquidationMatchesDocumentedSimplifiedFormula() {
+        val longResult = calculator.calculate(
+            CalculationInput(
+                side = PositionSide.Long,
+                marginMode = MarginMode.Isolated,
+                quantity = BigDecimal("0.1"),
+                entryPrice = BigDecimal("20000"),
+                leverage = BigDecimal("10"),
+                maintenanceMarginRatePercent = BigDecimal("0.5"),
+                estimateLiquidation = true
+            )
+        )
+        val shortResult = calculator.calculate(
+            CalculationInput(
+                side = PositionSide.Short,
+                marginMode = MarginMode.Isolated,
+                quantity = BigDecimal("0.1"),
+                entryPrice = BigDecimal("20000"),
+                leverage = BigDecimal("10"),
+                maintenanceMarginRatePercent = BigDecimal("0.5"),
+                estimateLiquidation = true
+            )
+        )
+
+        assertScaledEquals("18100", longResult!!.liquidationPrice)
+        assertScaledEquals("21900", shortResult!!.liquidationPrice)
+    }
+
+    @Test
+    fun copiedPerformanceIncludesDisclaimerAndDetailedTargetResults() {
+        val input = CalculationInput(
+            quantity = BigDecimal("0.1"),
+            entryPrice = BigDecimal("20000"),
+            exitPrice = BigDecimal("21000"),
+            takeProfitPrice = BigDecimal("22000"),
+            stopLossPrice = BigDecimal("19000"),
+            leverage = BigDecimal("10"),
+            openFeeRatePercent = BigDecimal.ZERO,
+            closeFeeRatePercent = BigDecimal.ZERO
+        )
+        val result = calculator.calculate(input)
+
+        val summary = ClipboardFormatter.formatSinglePerformance("方案 1", "BTC", input, result, CopyFormat.Summary)
+        val detail = ClipboardFormatter.formatSinglePerformance("方案 1", "BTC", input, result, CopyFormat.Detail)
+
+        assertTrue(summary.contains("仅为本地计算结果，不构成交易依据"))
+        assertTrue(detail.contains("止盈价：22000 USDT"))
+        assertTrue(detail.contains("止盈收益：+200 USDT"))
+        assertTrue(detail.contains("止损价：19000 USDT"))
+        assertTrue(detail.contains("止损亏损：-100 USDT"))
+    }
+
+    @Test
+    fun savedPlanPreservesCompleteInput() {
+        val input = CalculationInput(
+            quantity = BigDecimal("0.1"),
+            entryPrice = BigDecimal("20000"),
+            exitPrice = BigDecimal("21000"),
+            targetProfitAmount = BigDecimal("100"),
+            maxLossAmount = BigDecimal("50"),
+            totalFunds = BigDecimal("1000"),
+            estimateLiquidation = true,
+            calculateMaxOpen = true
+        )
+
+        val saved = ComparisonItem(id = "plan", name = "完整方案", input = input).toSavedPlan()
+
+        assertEquals(input, saved.input)
     }
 
     @Test
@@ -196,8 +271,8 @@ class FuturesCalculatorTest {
         assertScaledEquals("19000", result!!.newAveragePrice)
         assertScaledEquals("0.2", result.totalQuantity)
         assertScaledEquals("3800", result.totalPositionValue)
-        assertScaledEquals("18090.45226131", result.liquidationPriceBefore)
-        assertScaledEquals("17185.92964824", result.liquidationPriceAfter)
+        assertScaledEquals("18100", result.liquidationPriceBefore)
+        assertScaledEquals("17195", result.liquidationPriceAfter)
         assertScaledEquals("-5", result.liquidationPriceChangePercent)
     }
 
@@ -221,6 +296,29 @@ class FuturesCalculatorTest {
         assertScaledEquals("400", result.pnlAfterAdding)
         assertScaledEquals("300", result.pnlChange)
         assertScaledEquals("1000", result.averagePriceImprovement)
+    }
+
+    @Test
+    fun calculatesAveragingPreviewWithoutTargetExitPrice() {
+        val result = AveragingDecisionCalculator().calculate(
+            AveragingDecisionInput(
+                side = PositionSide.Long,
+                currentEntryPrice = BigDecimal("20000"),
+                currentQuantity = BigDecimal("0.1"),
+                currentMargin = BigDecimal("200"),
+                currentLeverage = BigDecimal("10"),
+                addEntryPrice = BigDecimal("18000"),
+                addAmount = BigDecimal("200")
+            )
+        )
+
+        assertNotNull(result)
+        assertScaledEquals("18947.36842105", result!!.newAveragePrice)
+        assertScaledEquals("1052.63157895", result.averagePriceImprovement)
+        assertScaledEquals("0.11111111", result.quantityIncrease)
+        assertNull(result.pnlWithoutAdding)
+        assertNull(result.pnlAfterAdding)
+        assertNull(result.pnlChange)
     }
 
     @Test

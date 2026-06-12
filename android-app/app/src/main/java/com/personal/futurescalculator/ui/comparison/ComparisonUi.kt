@@ -39,6 +39,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -111,7 +112,7 @@ fun buildComparisonSchemes(
     add(
         ComparisonSchemeView(
             MAIN_SCHEME_ID,
-            "主方案",
+            "当前方案",
             mainSymbol,
             coins.firstOrNull { it.symbol == mainSymbol },
             mainSettlementMode,
@@ -242,11 +243,12 @@ fun CopySchemeDialog(
 @Composable
 fun ComparisonResultDialog(
     schemes: List<ComparisonSchemeView>,
+    baselineId: String,
     onCopySummary: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val orderedSchemes = schemes.filter { it.comparablePnlUsdt() != null }
-    val mainScheme = orderedSchemes.firstOrNull { it.id == MAIN_SCHEME_ID } ?: orderedSchemes.firstOrNull()
+    val mainScheme = orderedSchemes.firstOrNull { it.id == baselineId } ?: orderedSchemes.firstOrNull()
     val comparedSchemes = orderedSchemes.filter { it.id != mainScheme?.id }
     var showFormula by rememberSaveable { mutableStateOf(false) }
     Dialog(onDismissRequest = onDismiss) {
@@ -261,8 +263,12 @@ fun ComparisonResultDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text("开仓方案对比", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    "顶部差值按所选基准方案的平仓价净盈亏计算；止盈止损用于补充查看风险边界。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 if (mainScheme != null && comparedSchemes.isNotEmpty()) {
-                    Text("相对主方案差值列表", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     comparedSchemes.forEach { scheme ->
                         ComparisonRelativeDiffCard(
                             scheme = scheme,
@@ -271,12 +277,12 @@ fun ComparisonResultDialog(
                         )
                     }
                 }
-                Text("方案摘要", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("方案摘要", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                 orderedSchemes.forEach { scheme ->
                     ComparisonSchemeSummary(scheme)
                 }
                 TextButton(onClick = { showFormula = !showFormula }, modifier = Modifier.align(Alignment.Start)) {
-                    Text(if (showFormula) "收起计算公式 ▲" else "查看计算公式 ▼", fontWeight = FontWeight.Bold)
+                    Text(if (showFormula) "收起计算公式" else "查看计算公式", fontWeight = FontWeight.SemiBold)
                 }
                 if (showFormula && mainScheme != null && comparedSchemes.isNotEmpty()) {
                     Surface(
@@ -287,14 +293,14 @@ fun ComparisonResultDialog(
                     ) {
                         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
-                                text = "对比方案净收益 - 主方案净收益 = 相对差值",
+                                text = "对比方案净收益 - 基准方案净收益 = 相对差值",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold
                             )
                             comparedSchemes.forEach { scheme ->
                                 val diff = scheme.comparablePnlUsdt()!! - mainScheme.comparablePnlUsdt()!!
                                 Text(
-                                    text = "${scheme.name} - ${mainScheme.name} = ${pnlText(diff, DecimalFormatters.formatPositiveNegative(diff))} USDT",
+                                    text = "${scheme.name}: ${comparisonFormulaOperand(scheme.comparablePnlUsdt())} - ${comparisonFormulaOperand(mainScheme.comparablePnlUsdt())} = ${DecimalFormatters.formatPositiveNegative(diff)} USDT",
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -326,7 +332,9 @@ fun ComparisonSchemeListCard(
     scheme: ComparisonSchemeView,
     selected: Boolean,
     enabled: Boolean,
+    isBaseline: Boolean,
     onSelectedChange: (Boolean) -> Unit,
+    onSetBaseline: () -> Unit,
     onClick: (() -> Unit)?
 ) {
     Surface(
@@ -357,7 +365,7 @@ fun ComparisonSchemeListCard(
                     )
                 } else {
                     Text(
-                        text = if (scheme.isMain) "主方案参数不完整，不可参与对比" else "参数不完整，不可参与对比",
+                        text = if (scheme.isMain) "当前参数不完整，不可参与对比" else "参数不完整，不可参与对比",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -369,6 +377,16 @@ fun ComparisonSchemeListCard(
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
+                if (enabled) {
+                    TextButton(onClick = onSetBaseline) {
+                        Text(
+                            if (isBaseline) "当前基准" else "设为基准",
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isBaseline) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
                 if (!scheme.isMain && onClick != null) {
                     TextButton(
                         onClick = onClick,
@@ -395,6 +413,9 @@ fun ComparisonSchemeEditorDialog(
     var showCoinDialog by remember { mutableStateOf(false) }
     var amountMenuExpanded by remember { mutableStateOf(false) }
     var settlementMenuExpanded by remember { mutableStateOf(false) }
+    var targetStopEnabled by remember(initialItem.id) {
+        mutableStateOf(initialItem.input.takeProfitPrice != null || initialItem.input.stopLossPrice != null)
+    }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val coin = coins.firstOrNull { it.id == item.coinId }
@@ -451,7 +472,17 @@ fun ComparisonSchemeEditorDialog(
                             settlementMode = item.settlementMode,
                             expanded = settlementMenuExpanded,
                             onExpandedChange = { settlementMenuExpanded = it },
-                            onSelect = { item = item.copy(settlementMode = it) },
+                            onSelect = { mode ->
+                                item = item.copy(
+                                    settlementMode = mode,
+                                    input = if (mode == SettlementMode.CoinMargined) {
+                                        item.input.copy(takeProfitPrice = null, stopLossPrice = null)
+                                    } else {
+                                        item.input
+                                    }
+                                )
+                                if (mode == SettlementMode.CoinMargined) targetStopEnabled = false
+                            },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -473,8 +504,7 @@ fun ComparisonSchemeEditorDialog(
                             }
                             Text(
                                 text = "仓位",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             AmountUnitInput(
@@ -528,6 +558,66 @@ fun ComparisonSchemeEditorDialog(
                             modifier = Modifier.weight(1f)
                         )
                     }
+                    if (item.settlementMode == SettlementMode.UsdtMargined) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(30.dp)
+                                .clickable {
+                                    targetStopEnabled = !targetStopEnabled
+                                    if (!targetStopEnabled) {
+                                        item = item.copy(
+                                            input = item.input.copy(takeProfitPrice = null, stopLossPrice = null)
+                                        )
+                                    }
+                                },
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (targetStopEnabled) "☑" else "☐",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (targetStopEnabled) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
+                            Text(
+                                text = "止盈/止损",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (targetStopEnabled) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                }
+                            )
+                        }
+                        if (targetStopEnabled) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                NumberInput(
+                                    value = item.input.takeProfitPrice,
+                                    onValueChange = {
+                                        item = item.copy(input = item.input.copy(takeProfitPrice = it))
+                                    },
+                                    label = "止盈价",
+                                    modifier = Modifier.weight(1f)
+                                )
+                                NumberInput(
+                                    value = item.input.stopLossPrice,
+                                    onValueChange = {
+                                        item = item.copy(input = item.input.copy(stopLossPrice = it))
+                                    },
+                                    label = "止损价",
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
@@ -575,7 +665,7 @@ fun PlanSelectionDialog(
                 Text("从方案库选择", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 if (plans.isEmpty()) {
                     Text(
-                        "暂无保存的开仓方案",
+                        "暂无可加入的方案。当前主方案或已加入对比的方案不会重复显示。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -639,6 +729,17 @@ fun createComparisonHistorySnapshot(schemes: List<ComparisonSchemeView>): Histor
                 add(HistoryField("数量", "${DecimalFormatters.formatQuantity(scheme.result?.quantity)} ${scheme.symbol}"))
                 add(HistoryField("开仓价", "${DecimalFormatters.formatCurrency(scheme.input.entryPrice)} USDT"))
                 add(HistoryField("平仓价", "${DecimalFormatters.formatCurrency(scheme.input.exitPrice)} USDT"))
+                if (scheme.settlementMode == SettlementMode.UsdtMargined && scheme.input.takeProfitPrice != null) {
+                    add(HistoryField("止盈价", "${DecimalFormatters.formatCurrency(scheme.input.takeProfitPrice)} USDT"))
+                    add(HistoryField("止盈净收益", "${DecimalFormatters.formatPositiveNegative(scheme.result?.takeProfitNetPnl)} USDT"))
+                }
+                if (scheme.settlementMode == SettlementMode.UsdtMargined && scheme.input.stopLossPrice != null) {
+                    add(HistoryField("止损价", "${DecimalFormatters.formatCurrency(scheme.input.stopLossPrice)} USDT"))
+                    add(HistoryField("止损净亏损", "${DecimalFormatters.formatPositiveNegative(scheme.result?.stopLossNetPnl)} USDT"))
+                }
+                if (scheme.settlementMode == SettlementMode.UsdtMargined && scheme.result?.rewardRiskRatio != null) {
+                    add(HistoryField("盈亏比", DecimalFormatters.formatQuantity(scheme.result.rewardRiskRatio)))
+                }
                 add(HistoryField(scheme.primaryPnlLabel(), scheme.primaryPnlText()))
                 add(HistoryField("折算收益", "${DecimalFormatters.formatPositiveNegative(scheme.comparablePnlUsdt())} USDT"))
                 add(HistoryField("保证金收益率（ROI）", if (scheme.settlementMode == SettlementMode.UsdtMargined) DecimalFormatters.formatPercentage(scheme.result?.roiPercent) else "不适用"))
@@ -1085,55 +1186,57 @@ private fun ComparisonSchemeSummary(scheme: ComparisonSchemeView) {
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.16f))
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded },
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                CoinIcon(coin = scheme.coin, size = 24)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    CoinIcon(coin = scheme.coin, size = 28)
                     Text(
-                        text = "${scheme.name} · ${scheme.symbol} · ${comparisonSettlementHistoryDisplay(scheme.settlementMode, scheme.coinMarginedCalculationMode)}",
-                        style = MaterialTheme.typography.bodyLarge,
+                        text = "${scheme.name} ${scheme.symbol}",
+                        style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold
                     )
+                    Text(
+                        text = "${scheme.input.side.label()} · ${scheme.input.marginMode.label()} · ${scheme.input.leverage.stripTrailingZeros().toPlainString()}x · ${comparisonSettlementHistoryDisplay(scheme.settlementMode, scheme.coinMarginedCalculationMode)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-                TextButton(
-                    onClick = { expanded = !expanded },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(if (expanded) "收起" else "展开", fontWeight = FontWeight.Bold)
+                    Text(
+                        text = scheme.primaryPnlText(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = pnlColor(scheme.primaryPnlValue()),
+                        maxLines = 1
+                    )
+                    DropdownChevronIcon(
+                        modifier = Modifier.rotate(if (expanded) 180f else 0f),
+                        iconSize = 14.dp
+                    )
                 }
             }
-            MetricTile(
-                label = scheme.primaryPnlLabel(),
-                value = scheme.primaryPnlText(),
-                valueColor = pnlColor(scheme.primaryPnlValue())
-            )
-            if (scheme.settlementMode == SettlementMode.CoinMargined) {
-                MetricTile(
-                    label = "折算收益",
-                    value = "${pnlText(scheme.comparablePnlUsdt(), DecimalFormatters.formatPositiveNegative(scheme.comparablePnlUsdt()))} USDT",
-                    valueColor = pnlColor(scheme.comparablePnlUsdt())
-                )
-            }
-            Text(
-                text = "${scheme.symbol} | ${comparisonSettlementDisplay(scheme.settlementMode, scheme.coinMarginedCalculationMode)} | ${scheme.input.side.label()}",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
             if (expanded) {
-                Text(
-                    text = "${scheme.input.side.label()} · ${scheme.input.marginMode.label()} · ${scheme.input.leverage.stripTrailingZeros().toPlainString()}x · ${comparisonSettlementHistoryDisplay(scheme.settlementMode, scheme.coinMarginedCalculationMode)}",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                if (scheme.settlementMode == SettlementMode.CoinMargined) {
+                    MetricTile(
+                        label = "折算收益",
+                        value = "${pnlText(scheme.comparablePnlUsdt(), DecimalFormatters.formatPositiveNegative(scheme.comparablePnlUsdt()))} USDT",
+                        valueColor = pnlColor(scheme.comparablePnlUsdt())
+                    )
+                }
                 ComparisonInputRow {
                     MetricTile(
                         label = "开仓价",
@@ -1192,6 +1295,37 @@ private fun ComparisonSchemeSummary(scheme: ComparisonSchemeView) {
                         value = "${DecimalFormatters.formatCurrency(scheme.result?.grossPnl)} USDT",
                         valueColor = pnlColor(scheme.result?.grossPnl)
                     )
+                }
+                if (
+                    scheme.settlementMode == SettlementMode.UsdtMargined &&
+                    (scheme.input.takeProfitPrice != null || scheme.input.stopLossPrice != null)
+                ) {
+                    ComparisonInputRow {
+                        scheme.input.takeProfitPrice?.let { takeProfitPrice ->
+                            MetricTile(
+                                label = "止盈价",
+                                value = "${DecimalFormatters.formatCurrency(takeProfitPrice)} USDT",
+                                supporting = "净收益 ${DecimalFormatters.formatPositiveNegative(scheme.result?.takeProfitNetPnl)} USDT",
+                                valueColor = pnlColor(scheme.result?.takeProfitNetPnl),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        scheme.input.stopLossPrice?.let { stopLossPrice ->
+                            MetricTile(
+                                label = "止损价",
+                                value = "${DecimalFormatters.formatCurrency(stopLossPrice)} USDT",
+                                supporting = "净亏损 ${DecimalFormatters.formatPositiveNegative(scheme.result?.stopLossNetPnl)} USDT",
+                                valueColor = pnlColor(scheme.result?.stopLossNetPnl),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                    scheme.result?.rewardRiskRatio?.let { ratio ->
+                        MetricTile(
+                            label = "盈亏比",
+                            value = DecimalFormatters.formatQuantity(ratio)
+                        )
+                    }
                 }
                 if (scheme.input.estimateLiquidation) {
                     comparisonLiquidationPrice(scheme.input, scheme.result)?.let {
@@ -1333,6 +1467,11 @@ private fun ComparisonSchemeView.primaryPnlText(): String = when (settlementMode
 
     SettlementMode.CoinMargined ->
         "${DecimalFormatters.formatPositiveNegative(coinMarginedResult?.pnlCoin)} $symbol"
+}
+
+private fun comparisonFormulaOperand(value: BigDecimal?): String {
+    val formatted = DecimalFormatters.formatPositiveNegative(value)
+    return if (value != null && value < BigDecimal.ZERO) "($formatted)" else formatted
 }
 
 private fun comparisonMissingFields(input: CalculationInput): List<String> = buildList {

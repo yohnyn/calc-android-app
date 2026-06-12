@@ -30,16 +30,7 @@ fun ComparisonItem.toSavedPlan(createdAt: Long = System.currentTimeMillis()): Sa
     coinId = coinId,
     settlementMode = settlementMode,
     coinMarginedCalculationMode = coinMarginedCalculationMode,
-    input = input.copy(
-        exitPrice = input.exitPrice,
-        targetProfitAmount = null,
-        targetRoiPercent = null,
-        maxLossAmount = null,
-        maxLossRoiPercent = null,
-        totalFunds = null,
-        estimateLiquidation = false,
-        calculateMaxOpen = false
-    ),
+    input = input,
     lastEditedAmountField = lastEditedAmountField,
     note = "",
     createdAt = createdAt,

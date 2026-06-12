@@ -85,12 +85,10 @@ class AveragingCalculator {
 
         return if (side == PositionSide.Long) {
             entryPrice
-                .multiply(BigDecimal.ONE - leverageRate)
-                .divide(BigDecimal.ONE - maintenanceMarginRate, DIVIDE_SCALE, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.ONE - leverageRate + maintenanceMarginRate)
         } else {
             entryPrice
-                .multiply(BigDecimal.ONE + leverageRate)
-                .divide(BigDecimal.ONE + maintenanceMarginRate, DIVIDE_SCALE, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.ONE + leverageRate - maintenanceMarginRate)
         }
     }
 }

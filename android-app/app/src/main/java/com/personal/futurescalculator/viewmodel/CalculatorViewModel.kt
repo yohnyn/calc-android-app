@@ -68,7 +68,8 @@ data class CalculatorUiState(
     val themeMode: ThemeMode = ThemeMode.System,
     val copyFormat: CopyFormat = CopyFormat.Summary,
     val historyRecords: List<HistoryRecord> = emptyList(),
-    val savedPlans: List<SavedPlan> = emptyList()
+    val savedPlans: List<SavedPlan> = emptyList(),
+    val openedPlanId: String? = null
 )
 
 class CalculatorViewModel(context: Context) : ViewModel() {
@@ -107,7 +108,7 @@ class CalculatorViewModel(context: Context) : ViewModel() {
     fun updateInput(input: CalculationInput) {
         viewModelScope.launch {
             val normalizedInput = normalizeAmountFields(input, _uiState.value.lastEditedAmountField)
-            _uiState.value = _uiState.value.copy(input = normalizedInput)
+            _uiState.value = _uiState.value.copy(input = normalizedInput, openedPlanId = null)
             calculateResult()
             calculateComparisonResults()
             calculateAveragingResult()
@@ -124,7 +125,8 @@ class CalculatorViewModel(context: Context) : ViewModel() {
             }
             _uiState.value = _uiState.value.copy(
                 input = normalizeAmountFields(updatedInput, field),
-                lastEditedAmountField = field
+                lastEditedAmountField = field,
+                openedPlanId = null
             )
             calculateResult()
             calculateComparisonResults()
@@ -173,6 +175,12 @@ class CalculatorViewModel(context: Context) : ViewModel() {
                 item
             }
             val items = _uiState.value.comparisonItems
+            if (items.any { existing ->
+                    existing.id != normalizedItem.id && existing.hasSameComparisonParameters(normalizedItem)
+                }
+            ) {
+                return@launch
+            }
             val updated = if (items.any { it.id == normalizedItem.id }) {
                 items.map { if (it.id == normalizedItem.id) normalizedItem else it }
             } else {
@@ -252,7 +260,8 @@ class CalculatorViewModel(context: Context) : ViewModel() {
             input = normalizeAmountFields(_uiState.value.input, AmountField.Quantity),
             lastEditedAmountField = AmountField.Quantity,
             settlementMode = SettlementMode.CoinMargined,
-            showCoinMarginedModeDialog = false
+            showCoinMarginedModeDialog = false,
+            openedPlanId = null
         )
         calculateCoinMarginedResult()
         calculateResult()
@@ -291,7 +300,7 @@ class CalculatorViewModel(context: Context) : ViewModel() {
         _uiState.value = _uiState.value.copy(historyRecords = updated)
     }
 
-    fun saveCurrentPlan(name: String) {
+    fun saveCurrentPlan(name: String): Boolean {
         val state = _uiState.value
         val plan = ComparisonItem(
             id = "plan_${System.currentTimeMillis()}",
@@ -302,28 +311,42 @@ class CalculatorViewModel(context: Context) : ViewModel() {
             input = state.input,
             lastEditedAmountField = state.lastEditedAmountField
         ).toSavedPlan()
+        if (state.savedPlans.any { it.hasSameSavedPlanParameters(plan) }) {
+            return false
+        }
         val updated = listOf(plan) + state.savedPlans
         planRepository.save(updated)
         _uiState.value = state.copy(savedPlans = updated)
+        return true
     }
 
     fun deleteSavedPlan(id: String) {
-        val updated = _uiState.value.savedPlans.filterNot { it.id == id }
+        val state = _uiState.value
+        val updated = state.savedPlans.filterNot { it.id == id }
         planRepository.save(updated)
-        _uiState.value = _uiState.value.copy(savedPlans = updated)
+        _uiState.value = if (state.openedPlanId == id) {
+            state.clearedCurrentWorkspace(savedPlans = updated)
+        } else {
+            state.copy(savedPlans = updated)
+        }
     }
 
     fun clearSavedPlans() {
+        val state = _uiState.value
         planRepository.save(emptyList())
         uiPreferencesRepository.saveAveragingExpanded(false)
-        _uiState.value = _uiState.value.copy(
-            savedPlans = emptyList(),
-            comparisonItems = emptyList(),
-            comparisonResults = emptyList(),
-            averagingDecisionInput = AveragingDecisionInput(),
-            averagingDecisionResult = null,
-            averagingExpanded = false
-        )
+        _uiState.value = if (state.openedPlanId != null) {
+            state.clearedCurrentWorkspace(savedPlans = emptyList())
+        } else {
+            state.copy(
+                savedPlans = emptyList(),
+                comparisonItems = emptyList(),
+                comparisonResults = emptyList(),
+                averagingDecisionInput = AveragingDecisionInput(),
+                averagingDecisionResult = null,
+                averagingExpanded = false
+            )
+        }
     }
 
     fun renameSavedPlan(id: String, name: String) {
@@ -368,12 +391,13 @@ class CalculatorViewModel(context: Context) : ViewModel() {
     fun openSavedPlan(plan: SavedPlan) {
         _uiState.value = _uiState.value.copy(
             input = normalizeAmountFields(
-                plan.input.copy(totalFunds = null, estimateLiquidation = false, calculateMaxOpen = false),
+                plan.input,
                 plan.lastEditedAmountField
             ),
             selectedCoinId = plan.coinId,
             settlementMode = plan.settlementMode,
-            lastEditedAmountField = plan.lastEditedAmountField
+            lastEditedAmountField = plan.lastEditedAmountField,
+            openedPlanId = plan.id
         )
         coinRepository.saveSelectedCoin(plan.coinId)
         calculateResult()
@@ -387,6 +411,9 @@ class CalculatorViewModel(context: Context) : ViewModel() {
             id = "item_${System.currentTimeMillis()}",
             coinMarginedCalculationMode = _uiState.value.coinMarginedCalculationMode
         )
+        if (_uiState.value.comparisonItems.any { it.hasSameComparisonParameters(item) }) {
+            return
+        }
         val updated = _uiState.value.comparisonItems + item
         _uiState.value = _uiState.value.copy(comparisonItems = updated)
         calculateComparisonResults()
@@ -410,7 +437,8 @@ class CalculatorViewModel(context: Context) : ViewModel() {
             settlementMode = mode,
             input = normalizeAmountFields(_uiState.value.input, source),
             lastEditedAmountField = source,
-            showCoinMarginedModeDialog = false
+            showCoinMarginedModeDialog = false,
+            openedPlanId = null
         )
         calculateResult()
         calculateComparisonResults()
@@ -419,7 +447,7 @@ class CalculatorViewModel(context: Context) : ViewModel() {
 
     fun selectCoin(id: String) {
         coinRepository.saveSelectedCoin(id)
-        _uiState.value = _uiState.value.copy(selectedCoinId = id)
+        _uiState.value = _uiState.value.copy(selectedCoinId = id, openedPlanId = null)
         calculateCoinMarginedResult()
     }
 
@@ -438,7 +466,8 @@ class CalculatorViewModel(context: Context) : ViewModel() {
         coinRepository.saveCustomCoins(updatedCustom)
         _uiState.value = _uiState.value.copy(
             coins = _uiState.value.coins.filterNot { it.id == coin.id } + coin,
-            selectedCoinId = coin.id
+            selectedCoinId = coin.id,
+            openedPlanId = null
         )
         coinRepository.saveSelectedCoin(coin.id)
         calculateCoinMarginedResult()
@@ -449,7 +478,7 @@ class CalculatorViewModel(context: Context) : ViewModel() {
         coinRepository.saveCustomCoins(updatedCustom)
         val remaining = _uiState.value.coins.filterNot { it.id == id }
         val selected = if (_uiState.value.selectedCoinId == id) remaining.firstOrNull()?.id ?: "bitcoin" else _uiState.value.selectedCoinId
-        _uiState.value = _uiState.value.copy(coins = remaining, selectedCoinId = selected)
+        _uiState.value = _uiState.value.copy(coins = remaining, selectedCoinId = selected, openedPlanId = null)
         coinRepository.saveSelectedCoin(selected)
         calculateCoinMarginedResult()
     }
@@ -564,6 +593,54 @@ class CalculatorViewModel(context: Context) : ViewModel() {
     }
 
 }
+
+private fun CalculatorUiState.clearedCurrentWorkspace(savedPlans: List<SavedPlan>): CalculatorUiState = copy(
+    input = CalculationInput(),
+    lastEditedAmountField = AmountField.Margin,
+    result = null,
+    maxOpenResult = null,
+    comparisonItems = emptyList(),
+    comparisonResults = emptyList(),
+    averagingInput = AveragingInput(),
+    averagingResult = null,
+    averagingDecisionInput = AveragingDecisionInput(),
+    averagingDecisionResult = null,
+    coinMarginedResult = null,
+    averagingExpanded = false,
+    savedPlans = savedPlans,
+    openedPlanId = null
+)
+
+private fun ComparisonItem.hasSameComparisonParameters(other: ComparisonItem): Boolean =
+    coinId == other.coinId &&
+        settlementMode == other.settlementMode &&
+        coinMarginedCalculationMode == other.coinMarginedCalculationMode &&
+        input == other.input &&
+        lastEditedAmountField == other.lastEditedAmountField
+
+private fun SavedPlan.hasSameSavedPlanParameters(other: SavedPlan): Boolean =
+    coinId == other.coinId &&
+        settlementMode == other.settlementMode &&
+        coinMarginedCalculationMode == other.coinMarginedCalculationMode &&
+        input.normalizedPlanParameters() == other.input.normalizedPlanParameters()
+
+private fun CalculationInput.normalizedPlanParameters(): CalculationInput = copy(
+    leverage = leverage.stripTrailingZeros(),
+    margin = margin?.stripTrailingZeros(),
+    entryPrice = entryPrice?.stripTrailingZeros(),
+    exitPrice = exitPrice?.stripTrailingZeros(),
+    quantity = quantity?.stripTrailingZeros(),
+    openFeeRatePercent = openFeeRatePercent.stripTrailingZeros(),
+    closeFeeRatePercent = closeFeeRatePercent.stripTrailingZeros(),
+    takeProfitPrice = takeProfitPrice?.stripTrailingZeros(),
+    stopLossPrice = stopLossPrice?.stripTrailingZeros(),
+    targetProfitAmount = targetProfitAmount?.stripTrailingZeros(),
+    targetRoiPercent = targetRoiPercent?.stripTrailingZeros(),
+    maxLossAmount = maxLossAmount?.stripTrailingZeros(),
+    maxLossRoiPercent = maxLossRoiPercent?.stripTrailingZeros(),
+    maintenanceMarginRatePercent = maintenanceMarginRatePercent.stripTrailingZeros(),
+    totalFunds = totalFunds?.stripTrailingZeros()
+)
 
 internal fun normalizeAmountFields(input: CalculationInput, source: AmountField): CalculationInput {
     val entryPrice = input.entryPrice

@@ -13,8 +13,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -34,11 +36,15 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.personal.futurescalculator.model.CalculationInput
 import com.personal.futurescalculator.model.ComparisonItem
+import com.personal.futurescalculator.model.CopyFormat
+import com.personal.futurescalculator.model.PositionSide
 import com.personal.futurescalculator.model.SettlementMode
 import com.personal.futurescalculator.domain.FuturesCalculator
 import com.personal.futurescalculator.ui.theme.LossRed
@@ -54,7 +60,6 @@ import com.personal.futurescalculator.ui.coin.CoinSelectorDialog
 import com.personal.futurescalculator.ui.comparison.ComparisonResultDialog
 import com.personal.futurescalculator.ui.comparison.ComparisonSchemeEditorDialog
 import com.personal.futurescalculator.ui.comparison.ComparisonSchemeListCard
-import com.personal.futurescalculator.ui.comparison.CopySchemeDialog
 import com.personal.futurescalculator.ui.comparison.MAIN_SCHEME_ID
 import com.personal.futurescalculator.ui.comparison.PlanSelectionDialog
 import com.personal.futurescalculator.ui.comparison.buildComparisonSchemes
@@ -84,10 +89,11 @@ import com.personal.futurescalculator.util.ClipboardFormatter
 import com.personal.futurescalculator.util.DecimalFormatters
 import com.personal.futurescalculator.viewmodel.CalculatorViewModel
 import java.math.BigDecimal
+import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 private const val RESULT_CARD_MAIN = "main"
 private const val RESULT_CARD_COIN = "coin"
-private const val RESULT_CARD_AVERAGING = "averaging"
 
 @Composable
 fun CalculatorScreen(
@@ -108,13 +114,19 @@ fun CalculatorScreen(
     var showAveragingResultDialog by rememberSaveable { mutableStateOf(false) }
     var showComparisonResultDialog by rememberSaveable { mutableStateOf(false) }
     var revealedResultCards by rememberSaveable { mutableStateOf(emptySet<String>()) }
-    var showCopySchemeDialog by rememberSaveable { mutableStateOf(false) }
     var showPlanSelectionDialog by rememberSaveable { mutableStateOf(false) }
+    var showClearParametersConfirmation by rememberSaveable { mutableStateOf(false) }
+    var showCopyFormatSelection by rememberSaveable { mutableStateOf(false) }
+    var showSavePlanDialog by rememberSaveable { mutableStateOf(false) }
+    var savePlanName by rememberSaveable { mutableStateOf("") }
     var comparisonEditorItem by remember { mutableStateOf<ComparisonItem?>(null) }
     var selectedComparisonIds by rememberSaveable { mutableStateOf(setOf<String>(MAIN_SCHEME_ID)) }
+    var comparisonBaselineId by rememberSaveable { mutableStateOf(MAIN_SCHEME_ID) }
     var averagingValidationMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var operationRequirementMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var averagingSymbolOverride by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingScrollToAveraging by rememberSaveable { mutableStateOf(false) }
+    var averagingSectionOffset by rememberSaveable { mutableStateOf(0) }
     var pnlDisplayMode by rememberSaveable { mutableStateOf(PnlDisplayMode.ProfitGreen) }
     var feedbackText by rememberSaveable { mutableStateOf("") }
     var comparisonSectionExpanded by rememberSaveable { mutableStateOf(true) }
@@ -189,14 +201,46 @@ fun CalculatorScreen(
         calculateMaxOpen = false
     )
     val availableComparisonPlans = uiState.savedPlans.filterNot { plan ->
-        plan.coinId == uiState.selectedCoinId &&
+        val planInputForMainMatch = plan.input.copy(
+            targetProfitAmount = null,
+            targetRoiPercent = null,
+            maxLossAmount = null,
+            maxLossRoiPercent = null,
+            totalFunds = null,
+            estimateLiquidation = false,
+            calculateMaxOpen = false
+        )
+        val matchesMain = plan.coinId == uiState.selectedCoinId &&
             plan.settlementMode == uiState.settlementMode &&
             plan.coinMarginedCalculationMode == uiState.coinMarginedCalculationMode &&
-            plan.input == mainInputForPlanMatch
+            planInputForMainMatch == mainInputForPlanMatch
+        val alreadyAdded = uiState.comparisonItems.any { item ->
+            item.coinId == plan.coinId &&
+                item.settlementMode == plan.settlementMode &&
+                item.coinMarginedCalculationMode == plan.coinMarginedCalculationMode &&
+                item.input == plan.input &&
+                item.lastEditedAmountField == plan.lastEditedAmountField
+        }
+        matchesMain || alreadyAdded
     }
     val hideKeyboardAndClearFocus: () -> Unit = {
         focusManager.clearFocus(force = true)
         keyboardController?.hide()
+    }
+    val copyCurrentResult: (CopyFormat) -> Unit = { format ->
+        clipboardManager.setText(
+            AnnotatedString(
+                ClipboardFormatter.formatSinglePerformance(
+                    name = "当前方案",
+                    symbol = selectedCoin?.symbol ?: "币",
+                    input = uiState.input,
+                    result = uiState.result,
+                    format = format
+                )
+            )
+        )
+        showCopyFormatSelection = false
+        Toast.makeText(context, "计算结果已复制", Toast.LENGTH_SHORT).show()
     }
     val saveCurrentProfitHistory: () -> Unit = {
         val result = uiState.result
@@ -236,7 +280,8 @@ fun CalculatorScreen(
                 uiState.averagingDecisionInput.addAmount?.toPlainString(),
                 uiState.averagingDecisionInput.addQuantity?.toPlainString(),
                 uiState.averagingDecisionInput.targetExitPrice?.toPlainString(),
-                result.pnlChange.toPlainString()
+                result.pnlChange?.toPlainString(),
+                result.newAveragePrice.toPlainString()
             ).joinToString("|")
             if (key != lastAveragingHistoryKey) {
                 lastAveragingHistoryKey = key
@@ -262,13 +307,31 @@ fun CalculatorScreen(
         }
     }
 
-    LaunchedEffect(uiState.comparisonItems.map { it.id }) {
+    LaunchedEffect(uiState.comparisonItems.map { it.id }, completeComparisonIds) {
         val validIds = uiState.comparisonItems.map { it.id }.toSet() + MAIN_SCHEME_ID
-        selectedComparisonIds = selectedComparisonIds.intersect(validIds)
+        selectedComparisonIds = selectedComparisonIds.intersect(validIds).intersect(completeComparisonIds)
+    }
+    LaunchedEffect(mainComparisonComplete) {
+        if (mainComparisonComplete && selectedComparisonIds.isEmpty()) {
+            selectedComparisonIds = setOf(MAIN_SCHEME_ID)
+            comparisonBaselineId = MAIN_SCHEME_ID
+        }
+    }
+    LaunchedEffect(selectedComparisonIds, completeComparisonIds) {
+        if (comparisonBaselineId !in selectedComparisonIds || comparisonBaselineId !in completeComparisonIds) {
+            comparisonBaselineId = selectedComparisonIds.firstOrNull { it in completeComparisonIds } ?: MAIN_SCHEME_ID
+        }
     }
     LaunchedEffect(hasTargetStopPlan) {
         if (hasTargetStopPlan) {
             targetStopEnabled = true
+        }
+    }
+    LaunchedEffect(uiState.averagingExpanded, pendingScrollToAveraging) {
+        if (uiState.averagingExpanded && pendingScrollToAveraging) {
+            delay(100)
+            scrollState.animateScrollTo(averagingSectionOffset.coerceIn(0, scrollState.maxValue))
+            pendingScrollToAveraging = false
         }
     }
     CompositionLocalProvider(LocalProfitLossPalette provides profitLossPalette) {
@@ -307,11 +370,43 @@ fun CalculatorScreen(
                 showHistory = false
             },
             onAddPlanToComparison = viewModel::addSavedPlanToComparison,
-            onDeletePlan = viewModel::deleteSavedPlan,
+            onSendPlanToAveraging = { plan ->
+                val result = futuresCalculator.calculate(plan.input)
+                if (result != null) {
+                    viewModel.updateAveragingDecisionInput(
+                        uiState.averagingDecisionInput.copy(
+                            side = plan.input.side,
+                            currentEntryPrice = plan.input.entryPrice,
+                            currentQuantity = result.quantity,
+                            currentMargin = result.requiredMargin,
+                            currentLeverage = plan.input.leverage
+                        )
+                    )
+                    averagingSymbolOverride = uiState.coins.firstOrNull { it.id == plan.coinId }?.symbol ?: "币"
+                    viewModel.setAveragingExpanded(true)
+                    pendingScrollToAveraging = true
+                } else {
+                    operationRequirementMessage = "该方案参数不完整，暂时无法带入补仓助手。"
+                }
+                showHistory = false
+            },
+            onDeletePlan = { planId ->
+                val clearsOpenedPlan = uiState.openedPlanId == planId
+                viewModel.deleteSavedPlan(planId)
+                if (clearsOpenedPlan) {
+                    targetStopEnabled = false
+                    targetPriceExpanded = false
+                    selectedComparisonIds = setOf(MAIN_SCHEME_ID)
+                    comparisonBaselineId = MAIN_SCHEME_ID
+                }
+            },
             onClearPlans = {
                 viewModel.clearSavedPlans()
                 averagingSymbolOverride = null
+                targetStopEnabled = false
+                targetPriceExpanded = false
                 selectedComparisonIds = setOf(MAIN_SCHEME_ID)
+                comparisonBaselineId = MAIN_SCHEME_ID
             },
             onRenamePlan = viewModel::renameSavedPlan,
             onUpdatePlanNote = viewModel::updateSavedPlanNote,
@@ -350,6 +445,28 @@ fun CalculatorScreen(
             result = uiState.result!!,
             symbol = selectedCoin?.symbol ?: "币",
             onShowFeeSettings = { showFeeSettings = true },
+            onCopyResult = {
+                if (uiState.copyFormat == CopyFormat.Ask) {
+                    showCopyFormatSelection = true
+                } else {
+                    copyCurrentResult(uiState.copyFormat)
+                }
+            },
+            onSimulateAveraging = {
+                viewModel.updateAveragingDecisionInput(
+                    uiState.averagingDecisionInput.copy(
+                        side = uiState.input.side,
+                        currentEntryPrice = uiState.input.entryPrice,
+                        currentQuantity = uiState.result!!.quantity,
+                        currentMargin = uiState.result!!.requiredMargin,
+                        currentLeverage = uiState.input.leverage
+                    )
+                )
+                averagingSymbolOverride = selectedCoin?.symbol ?: "币"
+                viewModel.setAveragingExpanded(true)
+                pendingScrollToAveraging = true
+                showMainResultDialog = false
+            },
             onDismiss = {
                 revealedResultCards = revealedResultCards + RESULT_CARD_MAIN
                 showMainResultDialog = false
@@ -373,7 +490,6 @@ fun CalculatorScreen(
                 Toast.makeText(context, "补仓结果已复制", Toast.LENGTH_SHORT).show()
             },
             onDismiss = {
-                revealedResultCards = revealedResultCards + RESULT_CARD_AVERAGING
                 showAveragingResultDialog = false
             }
         )
@@ -392,11 +508,13 @@ fun CalculatorScreen(
     if (showComparisonResultDialog) {
         ComparisonResultDialog(
             schemes = comparisonSchemes.filter { it.id in selectedComparisonIds },
+            baselineId = comparisonBaselineId,
             onCopySummary = {
                 clipboardManager.setText(
                     AnnotatedString(
                         ClipboardFormatter.formatComparisonSummary(
-                            comparisonSchemes.filter { it.id in selectedComparisonIds }
+                            comparisonSchemes.filter { it.id in selectedComparisonIds },
+                            comparisonBaselineId
                         )
                     )
                 )
@@ -412,26 +530,83 @@ fun CalculatorScreen(
             onDismiss = viewModel::dismissCoinMarginedModeDialog
         )
     }
-    if (showCopySchemeDialog) {
-        CopySchemeDialog(
-            schemes = comparisonSchemes.filter { it.result?.netPnl != null },
-            copyFormat = uiState.copyFormat,
-            onSelect = { scheme, format ->
-                clipboardManager.setText(
-                    AnnotatedString(
-                        ClipboardFormatter.formatSinglePerformance(
-                            name = scheme.name,
-                            symbol = scheme.symbol,
-                            input = scheme.input,
-                            result = scheme.result,
-                            format = format
-                        )
-                    )
-                )
-                showCopySchemeDialog = false
-                Toast.makeText(context, "${scheme.name}战绩已复制", Toast.LENGTH_SHORT).show()
+    if (showClearParametersConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showClearParametersConfirmation = false },
+            title = { Text("清空当前参数？") },
+            text = { Text("仅清空首页当前填写内容，不会删除历史记录或方案库。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.reset()
+                        targetStopEnabled = false
+                        targetPriceExpanded = false
+                        selectedComparisonIds = setOf(MAIN_SCHEME_ID)
+                        comparisonBaselineId = MAIN_SCHEME_ID
+                        showClearParametersConfirmation = false
+                    }
+                ) {
+                    Text("清空", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
+                }
             },
-            onDismiss = { showCopySchemeDialog = false }
+            dismissButton = {
+                TextButton(onClick = { showClearParametersConfirmation = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+    if (showCopyFormatSelection) {
+        AlertDialog(
+            onDismissRequest = { showCopyFormatSelection = false },
+            title = { Text("选择复制格式") },
+            text = { Text("复制当前计算结果。") },
+            confirmButton = {
+                TextButton(onClick = { copyCurrentResult(CopyFormat.Detail) }) {
+                    Text("详细版", fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { copyCurrentResult(CopyFormat.Summary) }) {
+                    Text("简洁版", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        )
+    }
+    if (showSavePlanDialog) {
+        AlertDialog(
+            onDismissRequest = { showSavePlanDialog = false },
+            title = { Text("保存方案") },
+            text = {
+                OutlinedTextField(
+                    value = savePlanName,
+                    onValueChange = { savePlanName = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("方案名称") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val saved = viewModel.saveCurrentPlan(savePlanName)
+                        showSavePlanDialog = false
+                        Toast.makeText(
+                            context,
+                            if (saved) "方案已保存" else "相同方案已存在，无需重复保存",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    enabled = savePlanName.isNotBlank()
+                ) {
+                    Text("保存", fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSavePlanDialog = false }) {
+                    Text("取消")
+                }
+            }
         )
     }
     if (showPlanSelectionDialog) {
@@ -442,6 +617,9 @@ fun CalculatorScreen(
             onSelect = { item ->
                 viewModel.saveComparisonItem(item)
                 selectedComparisonIds = selectedComparisonIds + item.id
+                if (selectedComparisonIds.intersect(completeComparisonIds).isEmpty()) {
+                    comparisonBaselineId = item.id
+                }
                 showPlanSelectionDialog = false
             },
             onDismiss = { showPlanSelectionDialog = false }
@@ -456,6 +634,9 @@ fun CalculatorScreen(
                 hideKeyboardAndClearFocus()
                 viewModel.saveComparisonItem(it)
                 selectedComparisonIds = selectedComparisonIds + it.id
+                if (selectedComparisonIds.intersect(completeComparisonIds).isEmpty()) {
+                    comparisonBaselineId = it.id
+                }
                 comparisonEditorItem = null
             },
             onDelete = {
@@ -501,6 +682,7 @@ fun CalculatorScreen(
                 targetStopEnabled = targetStopEnabled,
                 targetPriceExpanded = targetPriceExpanded,
                 onCoinClick = { showCoinSelector = true },
+                onClearClick = { showClearParametersConfirmation = true },
                 onSettlementModeChange = viewModel::onContractModeChanged,
                 onTargetStopEnabledChange = { targetStopEnabled = it },
                 onTargetPriceExpandedChange = { targetPriceExpanded = it },
@@ -510,47 +692,46 @@ fun CalculatorScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.Top
                     ) {
-                        NumberInput(
-                            value = uiState.input.targetProfitAmount,
-                            onValueChange = {
-                                viewModel.updateInput(
-                                    uiState.input.copy(
-                                        targetProfitAmount = it,
-                                        targetRoiPercent = null
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            NumberInput(
+                                value = uiState.input.targetProfitAmount,
+                                onValueChange = {
+                                    viewModel.updateInput(
+                                        uiState.input.copy(
+                                            targetProfitAmount = it,
+                                            targetRoiPercent = null
+                                        )
                                     )
+                                },
+                                label = "目标盈利 USDT"
+                            )
+                            uiState.result?.targetProfitPriceByAmount?.let { price ->
+                                MetricTile(
+                                    label = "对应价格",
+                                    value = "${DecimalFormatters.formatCurrency(price)} USDT"
                                 )
-                            },
-                            label = "目标收益 USDT",
-                            modifier = Modifier.weight(1f)
-                        )
-                        NumberInput(
-                            value = uiState.input.maxLossAmount,
-                            onValueChange = {
-                                viewModel.updateInput(
-                                    uiState.input.copy(
-                                        maxLossAmount = it,
-                                        maxLossRoiPercent = null
+                            }
+                        }
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            NumberInput(
+                                value = uiState.input.maxLossAmount,
+                                onValueChange = {
+                                    viewModel.updateInput(
+                                        uiState.input.copy(
+                                            maxLossAmount = it,
+                                            maxLossRoiPercent = null
+                                        )
                                     )
+                                },
+                                label = "最大亏损 USDT"
+                            )
+                            uiState.result?.stopLossPriceByAmount?.let { price ->
+                                MetricTile(
+                                    label = "对应价格",
+                                    value = "${DecimalFormatters.formatCurrency(price)} USDT"
                                 )
-                            },
-                            label = "目标亏损 USDT",
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        MetricTile(
-                            label = "目标收益价格",
-                            value = "${DecimalFormatters.formatCurrency(uiState.result?.targetProfitPriceByAmount)} USDT",
-                            modifier = Modifier.weight(1f)
-                        )
-                        MetricTile(
-                            label = "目标亏损价格",
-                            value = "${DecimalFormatters.formatCurrency(uiState.result?.stopLossPriceByAmount)} USDT",
-                            modifier = Modifier.weight(1f)
-                        )
+                            }
+                        }
                     }
                 },
                 maxOpenContent = {
@@ -583,6 +764,12 @@ fun CalculatorScreen(
                     label = if (netPnl != null && netPnl < BigDecimal.ZERO) "净亏损" else "净盈利",
                     value = "${pnlText(netPnl, DecimalFormatters.formatPositiveNegative(netPnl))} USDT  ·  ${DecimalFormatters.formatPositiveNegative(uiState.result!!.roiPercent)}%",
                     valueColor = pnlColor(netPnl),
+                    actionText = "保存方案",
+                    onActionClick = {
+                        val sideLabel = if (uiState.input.side == PositionSide.Long) "做多" else "做空"
+                        savePlanName = "${selectedCoin?.symbol ?: "币"} $sideLabel ${uiState.input.leverage.stripTrailingZeros().toPlainString()}x"
+                        showSavePlanDialog = true
+                    },
                     onClick = {
                         hideKeyboardAndClearFocus()
                         saveCurrentProfitHistory()
@@ -604,77 +791,66 @@ fun CalculatorScreen(
             SectionPanel(
                 title = "开仓方案对比",
                 trailing = {
-                    TextButton(
-                        onClick = { comparisonSectionExpanded = !comparisonSectionExpanded },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
-                    ) {
-                        Text(if (comparisonSectionExpanded) "收起" else "展开", fontWeight = FontWeight.Bold)
+                    if (uiState.comparisonItems.isNotEmpty()) {
+                        TextButton(
+                            onClick = { comparisonSectionExpanded = !comparisonSectionExpanded },
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+                        ) {
+                            Text(if (comparisonSectionExpanded) "收起" else "展开", fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
             ) {
-                if (!comparisonSectionExpanded) {
+                if (!comparisonSectionExpanded && uiState.comparisonItems.isNotEmpty()) {
                     Text(
-                        text = "共 ${comparisonSchemes.size} 个方案，点击展开继续编辑或查看对比。",
+                        text = "共 ${completeComparisonIds.size} 个可用方案，点击展开继续编辑或查看对比。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                } else if (!mainComparisonComplete) {
-                    Text(
-                        text = "完成主方案参数后可对比",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SoftOutlinedButton(
-                            onClick = {
-                                comparisonEditorItem = ComparisonItem(
-                                    id = "item_${System.currentTimeMillis()}",
-                                    name = "方案 ${uiState.comparisonItems.size + 2}",
-                                    coinId = uiState.selectedCoinId,
-                                    settlementMode = uiState.settlementMode,
-                                    coinMarginedCalculationMode = uiState.coinMarginedCalculationMode,
-                                    input = CalculationInput()
-                                )
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = MaterialTheme.shapes.small
-                        ) {
-                            Text("手动创建")
-                        }
-                        SoftOutlinedButton(
-                            onClick = { showPlanSelectionDialog = true },
-                            modifier = Modifier.weight(1f),
-                            enabled = availableComparisonPlans.isNotEmpty(),
-                            shape = MaterialTheme.shapes.small
-                        ) {
-                            Text("从方案库选择")
-                        }
-                    }
-                    return@SectionPanel
                 } else {
-                    Text(
-                        text = "选择对比",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    comparisonSchemes.forEach { scheme ->
+                    if (!mainComparisonComplete) {
+                        Text(
+                            text = "当前参数不完整，不参与对比；仍可直接创建或从方案库选择方案。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    val visibleComparisonSchemes = comparisonSchemes.filterNot { it.isMain && !mainComparisonComplete }
+                    if (visibleComparisonSchemes.isNotEmpty()) {
+                        Text(
+                            text = "选择对比 · 基准用于计算相对差值",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    visibleComparisonSchemes.forEach { scheme ->
                         val schemeComplete = when (scheme.settlementMode) {
                             SettlementMode.UsdtMargined -> scheme.result?.netPnl != null
                             SettlementMode.CoinMargined -> scheme.coinMarginedResult?.estimatedValueUsdt != null
                         }
-                        val selectionEnabled = schemeComplete && (!scheme.isMain || mainComparisonComplete)
+                        val selectionEnabled = schemeComplete
                         ComparisonSchemeListCard(
                             scheme = scheme,
                             selected = scheme.id in selectedComparisonIds && selectionEnabled,
                             enabled = selectionEnabled,
+                            isBaseline = scheme.id == comparisonBaselineId,
                             onSelectedChange = { selected ->
                                 selectedComparisonIds = if (selected && selectedComparisonIds.size >= 3) {
                                     operationRequirementMessage = "一次最多比较3个方案。"
                                     selectedComparisonIds
                                 } else if (selected) {
+                                    if (selectedComparisonIds.isEmpty()) comparisonBaselineId = scheme.id
                                     selectedComparisonIds + scheme.id
                                 } else {
                                     selectedComparisonIds - scheme.id
+                                }
+                            },
+                            onSetBaseline = {
+                                if (scheme.id !in selectedComparisonIds && selectedComparisonIds.size >= 3) {
+                                    operationRequirementMessage = "一次最多比较3个方案。"
+                                } else {
+                                    selectedComparisonIds = selectedComparisonIds + scheme.id
+                                    comparisonBaselineId = scheme.id
                                 }
                             },
                             onClick = if (scheme.isMain) null else {
@@ -702,22 +878,11 @@ fun CalculatorScreen(
                         SoftOutlinedButton(
                             onClick = { showPlanSelectionDialog = true },
                             modifier = Modifier.weight(1f),
-                            enabled = availableComparisonPlans.isNotEmpty(),
+                            enabled = uiState.savedPlans.isNotEmpty(),
                             shape = MaterialTheme.shapes.small
                         ) {
                             Text("从方案库选择")
                         }
-                    }
-                    SoftOutlinedButton(
-                        onClick = {
-                            viewModel.saveCurrentPlan("${selectedCoin?.symbol ?: "币"} 开仓方案")
-                            Toast.makeText(context, "开仓方案已保存", Toast.LENGTH_SHORT).show()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = mainComparisonComplete,
-                        shape = MaterialTheme.shapes.small
-                    ) {
-                        Text("保存开仓方案")
                     }
                     if (canOpenComparisonResult) {
                         Button(
@@ -738,7 +903,7 @@ fun CalculatorScreen(
                         }
                     } else {
                         Text(
-                            text = "添加并选择至少 1 个对比方案后可查看结果",
+                            text = "添加并选择至少 2 个完整方案后可查看结果",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -750,13 +915,15 @@ fun CalculatorScreen(
                 AveragingDecisionSection(
                     input = uiState.averagingDecisionInput,
                     result = uiState.averagingDecisionResult,
-                    showResultCard = RESULT_CARD_AVERAGING in revealedResultCards,
                     schemes = averagingSchemes,
                     symbol = averagingSymbolOverride ?: selectedCoin?.symbol ?: "币",
-                    settlementMode = uiState.settlementMode,
+                    modifier = Modifier.onGloballyPositioned {
+                        averagingSectionOffset = it.positionInParent().y.roundToInt()
+                    },
                     onInputChange = viewModel::updateAveragingDecisionInput,
                     onCollapse = { viewModel.setAveragingExpanded(false) },
                     onSchemeFilled = { averagingSymbolOverride = it.symbol },
+                    onManualPositionStarted = { averagingSymbolOverride = null },
                     onRequestResult = {
                         hideKeyboardAndClearFocus()
                         val hasCurrentHolding =
@@ -775,35 +942,18 @@ fun CalculatorScreen(
                 )
             } else {
                 AveragingDecisionEntryCard(
+                    input = uiState.averagingDecisionInput,
+                    result = uiState.averagingDecisionResult,
+                    symbol = averagingSymbolOverride ?: selectedCoin?.symbol ?: "币",
+                    modifier = Modifier.onGloballyPositioned {
+                        averagingSectionOffset = it.positionInParent().y.roundToInt()
+                    },
                     onClick = {
-                        uiState.result?.let { result ->
-                            viewModel.updateAveragingDecisionInput(
-                                uiState.averagingDecisionInput.copy(
-                                    side = uiState.input.side,
-                                    currentEntryPrice = uiState.input.entryPrice,
-                                    currentQuantity = result.quantity,
-                                    currentMargin = result.requiredMargin,
-                                    currentLeverage = uiState.input.leverage
-                                )
-                            )
-                            averagingSymbolOverride = selectedCoin?.symbol ?: "币"
-                        }
                         viewModel.setAveragingExpanded(true)
                     }
                 )
             }
 
-            if (uiState.settlementMode == SettlementMode.UsdtMargined && hasPnlResult) {
-            Button(
-                onClick = {
-                    showCopySchemeDialog = true
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.small
-            ) {
-                Text("一键复制战绩")
-            }
-            }
             SupportAuthorCard(onClick = { showDonation = true })
             }
             HomeBottomActions(

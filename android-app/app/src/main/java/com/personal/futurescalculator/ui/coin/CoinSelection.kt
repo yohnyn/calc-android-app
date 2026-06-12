@@ -84,7 +84,7 @@ fun CoinMarketHeader(
                 Text(
                     text = coin?.symbol ?: "选择币种",
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
             }

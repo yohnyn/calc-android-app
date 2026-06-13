@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -63,82 +65,88 @@ fun MainResultDialog(
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.28f))
         ) {
             Column(
-                modifier = Modifier.padding(12.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                modifier = Modifier.fillMaxWidth().heightIn(max = 660.dp)
             ) {
-                Text("交易预览", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                MainOrderedResultSection(input = input, result = result)
-                SectionPanel(
-                    title = "交易参数",
-                    trailing = {
-                        TextButton(onClick = { showInputDetails = !showInputDetails }) {
-                            Text(if (showInputDetails) "收起" else "展开", fontWeight = FontWeight.SemiBold)
+                ResultDialogHeader(title = "交易预览", onDismiss = onDismiss)
+                Column(
+                    modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    MainOrderedResultSection(input = input, result = result, symbol = symbol)
+                    SectionPanel(
+                        title = "交易参数",
+                        trailing = {
+                            TextButton(onClick = { showInputDetails = !showInputDetails }) {
+                                Text(if (showInputDetails) "收起" else "展开", fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    ) {
+                        if (showInputDetails) {
+                            CalculationInputDetails(
+                                input = input,
+                                symbol = symbol,
+                                settlementMode = SettlementMode.UsdtMargined,
+                                positionMargin = result.requiredMargin,
+                                positionQuantity = result.quantity,
+                                showSection = false,
+                                onShowFeeSettings = onShowFeeSettings
+                            )
+                        } else {
+                            Text(
+                                text = "方向、仓位、杠杆、价格与费率",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
-                ) {
-                    if (showInputDetails) {
-                        CalculationInputDetails(
-                            input = input,
-                            symbol = symbol,
-                            settlementMode = SettlementMode.UsdtMargined,
-                            positionMargin = result.requiredMargin,
-                            positionQuantity = result.quantity,
-                            showSection = false,
-                            onShowFeeSettings = onShowFeeSettings
-                        )
-                    } else {
-                        Text(
-                            text = "方向、仓位、杠杆、价格与费率",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                SectionPanel(
-                    title = "计算公式",
-                    trailing = {
-                        TextButton(onClick = { showFormula = !showFormula }) {
-                            Text(if (showFormula) "收起" else "展开", fontWeight = FontWeight.SemiBold)
+                    if (result.netPnl != null) {
+                        SectionPanel(
+                            title = "计算公式",
+                            trailing = {
+                                TextButton(onClick = { showFormula = !showFormula }) {
+                                    Text(if (showFormula) "收起" else "展开", fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                        ) {
+                            if (showFormula) {
+                                MetricTile(
+                                    label = "净盈亏",
+                                    value = "${formulaOperand(result.grossPnl)} - ${formulaOperand(result.totalFee ?: result.openFee)} = ${DecimalFormatters.formatSignedAmount(result.netPnl)} USDT"
+                                )
+                                MetricTile(
+                                    label = "保证金收益率（ROI）",
+                                    value = "${formulaOperand(result.netPnl)} / ${formulaOperand(result.requiredMargin)} × 100% = ${DecimalFormatters.formatSignedPercentage(result.roiPercent)}"
+                                )
+                            } else {
+                                Text(
+                                    text = "净盈亏与保证金收益率计算过程",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (showFormula) {
-                        MetricTile(
-                            label = "净盈亏",
-                            value = "${formulaOperand(result.grossPnl)} - ${formulaOperand(result.totalFee ?: result.openFee)} = ${DecimalFormatters.formatPositiveNegative(result.netPnl)} USDT"
-                        )
-                        MetricTile(
-                            label = "保证金收益率（ROI）",
-                            value = "${formulaOperand(result.netPnl)} / ${formulaOperand(result.requiredMargin)} × 100% = ${DecimalFormatters.formatPositiveNegative(result.roiPercent)}%"
-                        )
-                    } else {
-                        Text(
-                            text = "净盈亏与保证金收益率计算过程",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    OutlinedButton(
+                        onClick = onSimulateAveraging,
+                        modifier = Modifier.weight(1f),
+                        shape = MaterialTheme.shapes.small
+                    ) {
+                        Text("模拟补仓")
                     }
-                }
-                OutlinedButton(
-                    onClick = onCopyResult,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.small
-                ) {
-                    Text("复制计算结果")
-                }
-                OutlinedButton(
-                    onClick = onSimulateAveraging,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.small
-                ) {
-                    Text("模拟补仓")
-                }
-                Button(
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.small
-                ) {
-                    Text("关闭")
+                    if (result.netPnl != null) {
+                        Button(
+                            onClick = onCopyResult,
+                            modifier = Modifier.weight(1f),
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Text("复制结果")
+                        }
+                    }
                 }
             }
         }
@@ -160,25 +168,26 @@ fun CoinMarginedResultDialog(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(
-                modifier = Modifier.padding(12.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                modifier = Modifier.fillMaxWidth().heightIn(max = 660.dp)
             ) {
-                Text("币本位计算结果", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                CoinMarginedResultCard(result, symbol)
-                TextButton(
-                    onClick = { showInputDetails = !showInputDetails },
-                    modifier = Modifier.fillMaxWidth()
+                ResultDialogHeader(title = "币本位计算结果", onDismiss = onDismiss)
+                Column(
+                    modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text(
-                        if (showInputDetails) "收起交易参数" else "查看交易参数",
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-                if (showInputDetails) {
-                    CalculationInputDetails(input = input, symbol = symbol, settlementMode = SettlementMode.CoinMargined)
-                }
-                Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.small) {
-                    Text("关闭")
+                    CoinMarginedResultCard(result, symbol)
+                    TextButton(
+                        onClick = { showInputDetails = !showInputDetails },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            if (showInputDetails) "收起交易参数" else "查看交易参数",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    if (showInputDetails) {
+                        CalculationInputDetails(input = input, symbol = symbol, settlementMode = SettlementMode.CoinMargined)
+                    }
                 }
             }
         }
@@ -186,11 +195,15 @@ fun CoinMarginedResultDialog(
 }
 
 @Composable
-private fun MainOrderedResultSection(input: CalculationInput, result: CalculationResult) {
+private fun MainOrderedResultSection(input: CalculationInput, result: CalculationResult, symbol: String) {
     val palette = LocalProfitLossPalette.current
     val hasTargetStop = input.takeProfitPrice != null || input.stopLossPrice != null
     val leadValue = result.netPnl
-    val accent = if (leadValue == null || leadValue >= BigDecimal.ZERO) palette.profit else palette.loss
+    val accent = when {
+        leadValue == null -> MaterialTheme.colorScheme.primary
+        leadValue >= BigDecimal.ZERO -> palette.profit
+        else -> palette.loss
+    }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -199,21 +212,31 @@ private fun MainOrderedResultSection(input: CalculationInput, result: Calculatio
             border = BorderStroke(2.dp, accent.copy(alpha = 0.42f))
         ) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (hasTargetStop) {
-                    result.netPnl?.let {
-                        ResultPrimaryMetric("净盈亏", "${DecimalFormatters.formatPositiveNegative(it)} USDT", pnlColor(it))
-                    }
-                    ResultMiniMetric(
-                        label = "保证金收益率（ROI）",
-                        value = pnlText(result.roiPercent, DecimalFormatters.formatPercentage(result.roiPercent)),
-                        color = pnlColor(result.netPnl)
+                if (result.netPnl == null) {
+                    Text(
+                        text = "仓位预览",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                    if (result.takeProfitNetPnl != null || result.stopLossNetPnl != null) {
+                    ResultInputRow {
+                        MetricTile(
+                            label = "仓位价值",
+                            value = "${DecimalFormatters.formatAmount(result.positionValue)} USDT",
+                            modifier = Modifier.weight(1f)
+                        )
+                        MetricTile(
+                            label = "仓位币数量",
+                            value = "${DecimalFormatters.formatQuantity(result.quantity)} $symbol",
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    if (hasTargetStop && (result.takeProfitNetPnl != null || result.stopLossNetPnl != null)) {
                         ResultInputRow {
                             result.takeProfitNetPnl?.let {
                                 MetricTile(
                                     label = "止盈收益",
-                                    value = "${DecimalFormatters.formatPositiveNegative(it)} USDT",
+                                    value = "${DecimalFormatters.formatSignedAmount(it)} USDT",
                                     valueColor = palette.profit,
                                     modifier = Modifier.weight(1f)
                                 )
@@ -221,26 +244,61 @@ private fun MainOrderedResultSection(input: CalculationInput, result: Calculatio
                             result.stopLossNetPnl?.let {
                                 MetricTile(
                                     label = "止损亏损",
-                                    value = "${DecimalFormatters.formatPositiveNegative(it)} USDT",
+                                    value = "${DecimalFormatters.formatSignedAmount(it)} USDT",
                                     valueColor = palette.loss,
                                     modifier = Modifier.weight(1f)
                                 )
                             }
                         }
                     }
+                    Text(
+                        text = "等待填写平仓价后计算净盈亏和保证金收益率",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 } else {
-                    ResultPrimaryMetric(
-                        label = "净盈亏",
-                        value = "${DecimalFormatters.formatPositiveNegative(result.netPnl)} USDT",
-                        color = pnlColor(result.netPnl)
-                    )
-                }
-                if (!hasTargetStop) {
-                    ResultMiniMetric(
-                        label = "保证金收益率（ROI）",
-                        value = pnlText(result.roiPercent, DecimalFormatters.formatPercentage(result.roiPercent)),
-                        color = pnlColor(result.netPnl)
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        DetailResultMetric(
+                            label = if (result.netPnl < BigDecimal.ZERO) "净亏损" else "净盈利",
+                            value = "${DecimalFormatters.formatSignedAmount(result.netPnl)} USDT",
+                            color = pnlColor(result.netPnl),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Surface(
+                            modifier = Modifier.width(1.dp).height(52.dp),
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
+                        ) {}
+                        DetailResultMetric(
+                            label = "保证金收益率",
+                            value = DecimalFormatters.formatSignedPercentage(result.roiPercent),
+                            color = pnlColor(result.netPnl),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    if (result.takeProfitNetPnl != null || result.stopLossNetPnl != null) {
+                        ResultInputRow {
+                            result.takeProfitNetPnl?.let {
+                                MetricTile(
+                                    label = "止盈收益",
+                                    value = "${DecimalFormatters.formatSignedAmount(it)} USDT",
+                                    valueColor = palette.profit,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            result.stopLossNetPnl?.let {
+                                MetricTile(
+                                    label = "止损亏损",
+                                    value = "${DecimalFormatters.formatSignedAmount(it)} USDT",
+                                    valueColor = palette.loss,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -257,7 +315,7 @@ private fun MainOrderedResultSection(input: CalculationInput, result: Calculatio
                         MetricTile(
                             label = "强平价格",
                             value = result.liquidationPrice?.let {
-                                "${DecimalFormatters.formatCurrency(it)} USDT"
+                                "${DecimalFormatters.formatPrice(it)} USDT"
                             } ?: if (input.marginMode == MarginMode.Cross && input.totalFunds == null) {
                                 "请填写账户总资金"
                             } else {
@@ -280,14 +338,28 @@ private fun MainOrderedResultSection(input: CalculationInput, result: Calculatio
 }
 
 @Composable
-private fun ResultPrimaryMetric(label: String, value: String, color: Color) {
-    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun DetailResultMetric(
+    label: String,
+    value: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         Text(
             text = value,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = color
+            color = color,
+            maxLines = 1
         )
     }
 }
@@ -306,7 +378,7 @@ private fun MainResultSummary(result: CalculationResult) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("净盈亏", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
-                text = "${pnlText(result.netPnl, DecimalFormatters.formatCurrency(result.netPnl))} USDT",
+                text = "${pnlText(result.netPnl, DecimalFormatters.formatSignedAmount(result.netPnl))} USDT",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = resultAccent
@@ -327,7 +399,7 @@ private fun MainRiskCostSection(result: CalculationResult) {
         if (result.liquidationPrice != null) {
             MetricTile(
                 label = "强平价格",
-                value = "${DecimalFormatters.formatCurrency(result.liquidationPrice)} USDT",
+                value = "${DecimalFormatters.formatPrice(result.liquidationPrice)} USDT",
                 supporting = if (result.usedTotalFundsForLiquidation) {
                     "已使用总资金参与强平计算；未计其他仓位、手续费、资金费率与阶梯维持保证金"
                 } else {
@@ -349,12 +421,12 @@ private fun MainRiskCostSection(result: CalculationResult) {
         ) {
             MetricTile(
                 label = "开仓手续费",
-                value = "${DecimalFormatters.formatCurrency(result.openFee)} USDT",
+                value = "${DecimalFormatters.formatAmount(result.openFee)} USDT",
                 modifier = Modifier.weight(1f)
             )
             MetricTile(
                 label = "平仓手续费",
-                value = "${DecimalFormatters.formatCurrency(result.closeFee)} USDT",
+                value = "${DecimalFormatters.formatAmount(result.closeFee)} USDT",
                 modifier = Modifier.weight(1f)
             )
         }
@@ -385,7 +457,7 @@ private fun MainTargetStopSection(input: CalculationInput, result: CalculationRe
             )
             MetricTile(
                 label = "止盈收益",
-                value = result.takeProfitNetPnl?.let { "${DecimalFormatters.formatPositiveNegative(it)} USDT" }
+                value = result.takeProfitNetPnl?.let { "${DecimalFormatters.formatSignedAmount(it)} USDT" }
                     ?: targetPriceSupporting(result.targetProfitPriceByAmount, result.targetProfitPriceByRoi)
                     ?: "未计算",
                 valueColor = pnlColor(result.takeProfitNetPnl),
@@ -404,7 +476,7 @@ private fun MainTargetStopSection(input: CalculationInput, result: CalculationRe
             )
             MetricTile(
                 label = "止损亏损",
-                value = result.stopLossNetPnl?.let { "${DecimalFormatters.formatPositiveNegative(it)} USDT" }
+                value = result.stopLossNetPnl?.let { "${DecimalFormatters.formatSignedAmount(it)} USDT" }
                     ?: targetPriceSupporting(result.stopLossPriceByAmount, result.stopLossPriceByRoi)
                     ?: "未计算",
                 valueColor = pnlColor(result.stopLossNetPnl),
@@ -414,7 +486,7 @@ private fun MainTargetStopSection(input: CalculationInput, result: CalculationRe
         result.rewardRiskRatio?.let {
             MetricTile(
                 label = "盈亏比",
-                value = "1:${DecimalFormatters.formatQuantity(it)}"
+                value = "1:${DecimalFormatters.formatRatio(it)}"
             )
         }
     }
@@ -432,13 +504,13 @@ private fun CoinMarginedResultCard(result: CoinMarginedResult, symbol: String) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("币本位盈亏", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
-                "${pnlText(result.pnlCoin, DecimalFormatters.formatPositiveNegative(result.pnlCoin))} $symbol",
+                "${pnlText(result.pnlCoin, DecimalFormatters.formatSignedCoinAmount(result.pnlCoin))} $symbol",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = color
             )
             Text(
-                "折算价值 ≈ ${pnlText(result.estimatedValueUsdt, DecimalFormatters.formatPositiveNegative(result.estimatedValueUsdt))} USDT",
+                "折算价值 ≈ ${pnlText(result.estimatedValueUsdt, DecimalFormatters.formatSignedAmount(result.estimatedValueUsdt))} USDT",
                 style = MaterialTheme.typography.titleMedium
             )
             Text(
@@ -462,7 +534,7 @@ private fun CalculationInputDetails(
 ) {
     val content: @Composable () -> Unit = {
         Text(
-            text = "${input.side.label()} · ${input.marginMode.label()} · ${input.leverage.stripTrailingZeros().toPlainString()}x · ${if (settlementMode == SettlementMode.UsdtMargined) "U 本位" else "币本位"}",
+            text = "${input.side.label()} · ${input.marginMode.label()} · ${DecimalFormatters.formatLeverage(input.leverage)}x · ${if (settlementMode == SettlementMode.UsdtMargined) "U 本位" else "币本位"}",
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -470,25 +542,25 @@ private fun CalculationInputDetails(
         ResultInputRow {
             MetricTile(
                 label = "开仓价",
-                value = "${DecimalFormatters.formatCurrency(input.entryPrice)} USDT",
+                value = "${DecimalFormatters.formatPrice(input.entryPrice)} USDT",
                 modifier = Modifier.weight(1f)
             )
             MetricTile(
                 label = "平仓价",
-                value = "${DecimalFormatters.formatCurrency(input.exitPrice)} USDT",
+                value = "${DecimalFormatters.formatPrice(input.exitPrice)} USDT",
                 modifier = Modifier.weight(1f)
             )
         }
         ResultInputRow {
             MetricTile(
-                label = "当前仓位保证金",
-                value = (positionMargin ?: input.margin)?.let { "${DecimalFormatters.formatCurrency(it)} USDT" }
+                label = "仓位保证金",
+                value = (positionMargin ?: input.margin)?.let { "${DecimalFormatters.formatAmount(it)} USDT" }
                     ?: "未计算",
                 modifier = Modifier.weight(1f)
             )
             MetricTile(
-                label = "仓位币数量（按开仓价）",
-                value = (positionQuantity ?: input.quantity)?.let { "${DecimalFormatters.formatPositionQuantity(it)} $symbol" }
+                label = "仓位币数量",
+                value = (positionQuantity ?: input.quantity)?.let { "${DecimalFormatters.formatQuantity(it)} $symbol" }
                     ?: "未计算",
                 modifier = Modifier.weight(1f)
             )
@@ -506,7 +578,7 @@ private fun CalculationInputDetails(
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("费率", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(
-                        "${input.openFeeRatePercent.stripTrailingZeros().toPlainString()}% / ${input.closeFeeRatePercent.stripTrailingZeros().toPlainString()}%",
+                        "${DecimalFormatters.formatRate(input.openFeeRatePercent)} / ${DecimalFormatters.formatRate(input.closeFeeRatePercent)}",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -518,10 +590,10 @@ private fun CalculationInputDetails(
                 }
             }
         }
-        if (input.marginMode == MarginMode.Cross) {
+        if (input.totalFunds != null && (input.marginMode == MarginMode.Cross || input.calculateMaxOpen)) {
             MetricTile(
-                label = "账户总资产",
-                value = input.totalFunds?.let { "${DecimalFormatters.formatCurrency(it)} USDT" } ?: "未填写"
+                label = "账户总资金",
+                value = input.totalFunds?.let { "${DecimalFormatters.formatAmount(it)} USDT" } ?: "未填写"
             )
         }
     }
@@ -533,10 +605,28 @@ private fun CalculationInputDetails(
 }
 
 @Composable
+private fun ResultDialogHeader(title: String, onDismiss: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        TextButton(onClick = onDismiss) {
+            Text("关闭", fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
 fun CompactExpandableResultCard(
-    label: String,
-    value: String,
-    valueColor: Color,
+    primaryLabel: String,
+    primaryValue: String,
+    primaryColor: Color,
+    secondaryLabel: String? = null,
+    secondaryValue: String? = null,
+    secondaryColor: Color = primaryColor,
+    supportingText: String? = null,
     enabled: Boolean = true,
     actionText: String? = null,
     onActionClick: (() -> Unit)? = null,
@@ -545,8 +635,8 @@ fun CompactExpandableResultCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.small,
-        color = valueColor.copy(alpha = 0.10f),
-        border = BorderStroke(1.dp, valueColor.copy(alpha = 0.38f))
+        color = primaryColor.copy(alpha = 0.10f),
+        border = BorderStroke(1.dp, primaryColor.copy(alpha = 0.38f))
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -557,10 +647,40 @@ fun CompactExpandableResultCard(
                     .fillMaxWidth()
                     .clickable(enabled = enabled, onClick = onClick)
                     .padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = valueColor)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CompactResultMetric(
+                        label = primaryLabel,
+                        value = primaryValue,
+                        color = primaryColor,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (secondaryLabel != null && secondaryValue != null) {
+                        Surface(
+                            modifier = Modifier.width(1.dp).height(42.dp),
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
+                        ) {}
+                        CompactResultMetric(
+                            label = secondaryLabel,
+                            value = secondaryValue,
+                            color = secondaryColor,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                supportingText?.let {
+                    Text(
+                        text = it,
+                        modifier = Modifier.fillMaxWidth(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
@@ -582,6 +702,33 @@ fun CompactExpandableResultCard(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun CompactResultMetric(
+    label: String,
+    value: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = color,
+            maxLines = 1
+        )
     }
 }
 
@@ -670,7 +817,7 @@ fun ResultCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "${pnlText(result.netPnl, DecimalFormatters.formatCurrency(result.netPnl))} USDT",
+                        text = "${pnlText(result.netPnl, DecimalFormatters.formatSignedAmount(result.netPnl))} USDT",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
                         color = resultAccent
@@ -690,7 +837,7 @@ fun ResultCard(
             if (result.liquidationPrice != null) {
                 MetricTile(
                 label = "强平价格",
-                    value = "${DecimalFormatters.formatCurrency(result.liquidationPrice)} USDT",
+                    value = "${DecimalFormatters.formatPrice(result.liquidationPrice)} USDT",
                     supporting = if (result.usedTotalFundsForLiquidation) {
                         "已使用总资金参与强平计算；未计其他仓位、手续费、资金费率与阶梯维持保证金"
                     } else {
@@ -705,12 +852,12 @@ fun ResultCard(
             ) {
                 MetricTile(
                     label = "开仓手续费估算",
-                    value = "${DecimalFormatters.formatCurrency(result.openFee)} USDT",
+                    value = "${DecimalFormatters.formatAmount(result.openFee)} USDT",
                     modifier = Modifier.weight(1f)
                 )
                 MetricTile(
                     label = "平仓手续费估算",
-                    value = "${DecimalFormatters.formatCurrency(result.closeFee)} USDT",
+                    value = "${DecimalFormatters.formatAmount(result.closeFee)} USDT",
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -729,7 +876,7 @@ fun ResultCard(
                     MetricTile(
                         label = "止盈价",
                         value = targetPriceText(input?.takeProfitPrice, result.targetProfitPriceByAmount, result.targetProfitPriceByRoi),
-                        supporting = result.takeProfitNetPnl?.let { "止盈收益 ${DecimalFormatters.formatPositiveNegative(it)} USDT" }
+                        supporting = result.takeProfitNetPnl?.let { "止盈收益 ${DecimalFormatters.formatSignedAmount(it)} USDT" }
                             ?: targetPriceSupporting(result.targetProfitPriceByAmount, result.targetProfitPriceByRoi),
                         valueColor = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.weight(1f)
@@ -737,7 +884,7 @@ fun ResultCard(
                     MetricTile(
                         label = "止损价",
                         value = targetPriceText(input?.stopLossPrice, result.stopLossPriceByAmount, result.stopLossPriceByRoi),
-                        supporting = result.stopLossNetPnl?.let { "止损亏损 ${DecimalFormatters.formatPositiveNegative(it)} USDT" }
+                        supporting = result.stopLossNetPnl?.let { "止损亏损 ${DecimalFormatters.formatSignedAmount(it)} USDT" }
                             ?: targetPriceSupporting(result.stopLossPriceByAmount, result.stopLossPriceByRoi),
                         valueColor = MaterialTheme.colorScheme.secondary,
                         modifier = Modifier.weight(1f)
@@ -746,7 +893,7 @@ fun ResultCard(
                 result.rewardRiskRatio?.let {
                     MetricTile(
                         label = "盈亏比",
-                        value = "1:${DecimalFormatters.formatQuantity(it)}"
+                        value = "1:${DecimalFormatters.formatRatio(it)}"
                     )
                 }
             }
@@ -839,18 +986,40 @@ fun MetricTile(
 }
 
 @Composable
-fun EmptyResult() {
-    Box(
+fun EmptyResult(input: CalculationInput? = null) {
+    val hasAmount = input?.margin?.let { it > BigDecimal.ZERO } == true ||
+        input?.quantity?.let { it > BigDecimal.ZERO } == true
+    val hasEntryPrice = input?.entryPrice?.let { it > BigDecimal.ZERO } == true
+    val guidance = when {
+        !hasAmount && !hasEntryPrice -> "填写保证金或币数量与开仓价，即可查看仓位预览。"
+        !hasAmount -> "请填写保证金或币数量，即可查看仓位预览。"
+        !hasEntryPrice -> "请填写开仓价，即可查看仓位预览。"
+        else -> "请检查当前输入是否有效。"
+    }
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 14.dp),
-        contentAlignment = Alignment.Center
+            .padding(vertical = 2.dp),
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
     ) {
-        Text(
-            text = "填写开仓价和保证金后显示仓位，填写平仓价后显示盈亏",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(
+                text = "等待计算仓位",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = guidance,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
@@ -890,12 +1059,12 @@ private fun MarginMode.label(): String = if (this == MarginMode.Cross) "全仓" 
 
 private fun targetPriceText(directPrice: BigDecimal?, amountPrice: BigDecimal?, roiPrice: BigDecimal?): String {
     val price = directPrice ?: amountPrice ?: roiPrice
-    return "${DecimalFormatters.formatCurrency(price)} USDT"
+    return "${DecimalFormatters.formatPrice(price)} USDT"
 }
 
 private fun targetPriceSupporting(amountPrice: BigDecimal?, roiPrice: BigDecimal?): String? {
     return when {
-        amountPrice != null && roiPrice != null -> "ROI 价 ${DecimalFormatters.formatCurrency(roiPrice)} USDT"
+        amountPrice != null && roiPrice != null -> "ROI 价 ${DecimalFormatters.formatPrice(roiPrice)} USDT"
         amountPrice != null -> "按 USDT 金额反推"
         roiPrice != null -> "按 ROI 反推"
         else -> null
@@ -903,6 +1072,6 @@ private fun targetPriceSupporting(amountPrice: BigDecimal?, roiPrice: BigDecimal
 }
 
 private fun formulaOperand(value: BigDecimal?): String {
-    val formatted = DecimalFormatters.formatCurrency(value)
+    val formatted = DecimalFormatters.formatFormulaAmount(value)
     return if (value != null && value < BigDecimal.ZERO) "($formatted)" else formatted
 }

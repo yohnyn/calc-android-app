@@ -60,7 +60,7 @@ fun CoinMarketHeader(
 ) {
     Surface(
         modifier = modifier
-            .height(52.dp)
+            .height(48.dp)
             .clickable(onClick = onClick),
         shape = MaterialTheme.shapes.small,
         color = MaterialTheme.colorScheme.surface,
@@ -318,7 +318,9 @@ private fun CustomCoinDialog(
                 NumberInput(
                     value = price,
                     onValueChange = onPriceChange,
-                    label = "币种价格 USDT"
+                    label = "币种价格 USDT",
+                    requirePositive = true,
+                    maxDecimalPlaces = 6
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),

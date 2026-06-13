@@ -27,6 +27,7 @@ class AveragingCalculator {
             addQuantity <= BigDecimal.ZERO ||
             leverage < BigDecimal.ONE ||
             leverage > BigDecimal("125") ||
+            leverage.stripTrailingZeros().scale() > 0 ||
             maintenanceMarginRatePercent < BigDecimal.ZERO ||
             maintenanceMarginRatePercent >= BigDecimal("100")
         ) {

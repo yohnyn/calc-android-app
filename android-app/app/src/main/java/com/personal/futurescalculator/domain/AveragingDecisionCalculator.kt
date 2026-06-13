@@ -17,7 +17,9 @@ class AveragingDecisionCalculator {
             currentEntryPrice <= BigDecimal.ZERO ||
             currentQuantity <= BigDecimal.ZERO ||
             addEntryPrice <= BigDecimal.ZERO ||
-            (input.addAmount != null && leverage <= BigDecimal.ZERO)
+            leverage <= BigDecimal.ZERO ||
+            leverage > BigDecimal("125") ||
+            leverage.stripTrailingZeros().scale() > 0
         ) {
             return null
         }

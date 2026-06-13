@@ -19,11 +19,11 @@ object ClipboardFormatter {
     ): String {
         if (format == CopyFormat.Summary || format == CopyFormat.Ask) {
             return buildString {
-                appendLine("$symbol ${input.side.label()} ${input.leverage.stripTrailingZeros().toPlainString()}x")
-                appendLine("开仓价：${DecimalFormatters.formatCurrency(input.entryPrice)} USDT")
-                appendLine("平仓价：${DecimalFormatters.formatCurrency(input.exitPrice)} USDT")
-                appendLine("保证金：${DecimalFormatters.formatCurrency(result?.requiredMargin)} USDT")
-                appendLine("净盈亏：${DecimalFormatters.formatPositiveNegative(result?.netPnl)} USDT")
+                appendLine("$symbol ${input.side.label()} ${DecimalFormatters.formatLeverage(input.leverage)}x")
+                appendLine("开仓价：${DecimalFormatters.formatPrice(input.entryPrice)} USDT")
+                appendLine("平仓价：${DecimalFormatters.formatPrice(input.exitPrice)} USDT")
+                appendLine("保证金：${DecimalFormatters.formatAmount(result?.requiredMargin)} USDT")
+                appendLine("净盈亏：${DecimalFormatters.formatSignedAmount(result?.netPnl)} USDT")
                 appendLine("保证金收益率（ROI）：${DecimalFormatters.formatPercentage(result?.roiPercent)}")
                 appendLine()
                 append("说明：仅为本地计算结果，不构成交易依据。")
@@ -35,24 +35,24 @@ object ClipboardFormatter {
             appendLine("结算模式：U 本位")
             appendLine("方向：${input.side.label()}")
             appendLine("模式：${input.marginMode.label()}")
-            appendLine("杠杆：${input.leverage.stripTrailingZeros().toPlainString()}x")
+            appendLine("杠杆：${DecimalFormatters.formatLeverage(input.leverage)}x")
             appendLine()
             appendLine("【价格】")
-            appendLine("开仓价：${DecimalFormatters.formatCurrency(input.entryPrice)} USDT")
-            appendLine("平仓价：${DecimalFormatters.formatCurrency(input.exitPrice)} USDT")
+            appendLine("开仓价：${DecimalFormatters.formatPrice(input.entryPrice)} USDT")
+            appendLine("平仓价：${DecimalFormatters.formatPrice(input.exitPrice)} USDT")
             input.takeProfitPrice?.let {
-                appendLine("止盈价：${DecimalFormatters.formatCurrency(it)} USDT")
-                appendLine("止盈收益：${DecimalFormatters.formatPositiveNegative(result?.takeProfitNetPnl)} USDT")
+                appendLine("止盈价：${DecimalFormatters.formatPrice(it)} USDT")
+                appendLine("止盈收益：${DecimalFormatters.formatSignedAmount(result?.takeProfitNetPnl)} USDT")
             }
             input.stopLossPrice?.let {
-                appendLine("止损价：${DecimalFormatters.formatCurrency(it)} USDT")
-                appendLine("止损亏损：${DecimalFormatters.formatPositiveNegative(result?.stopLossNetPnl)} USDT")
+                appendLine("止损价：${DecimalFormatters.formatPrice(it)} USDT")
+                appendLine("止损亏损：${DecimalFormatters.formatSignedAmount(result?.stopLossNetPnl)} USDT")
             }
             appendLine()
             appendLine("【结果】")
-            appendLine("净盈亏：${DecimalFormatters.formatPositiveNegative(result?.netPnl)} USDT")
+            appendLine("净盈亏：${DecimalFormatters.formatSignedAmount(result?.netPnl)} USDT")
             appendLine("保证金收益率（ROI）：${DecimalFormatters.formatPercentage(result?.roiPercent)}")
-            appendLine("交易费用约：${DecimalFormatters.formatCurrency(result?.totalFee)} USDT")
+            appendLine("交易费用约：${DecimalFormatters.formatAmount(result?.totalFee)} USDT")
             appendLine()
             append("说明：仅为本地计算结果，不构成交易依据。")
         }
@@ -64,12 +64,12 @@ object ClipboardFormatter {
         return buildString {
             appendLine("【开仓方案对比】")
             if (main != null) {
-                appendLine("${main.name}：${DecimalFormatters.formatPositiveNegative(main.comparablePnlUsdt())} USDT")
+                appendLine("${main.name}：${DecimalFormatters.formatSignedAmount(main.comparablePnlUsdt())} USDT")
                 ordered.filter { it.id != main.id }.forEach { scheme ->
                     val pnl = scheme.comparablePnlUsdt()
-                    appendLine("${scheme.name}：${DecimalFormatters.formatPositiveNegative(pnl)} USDT")
+                    appendLine("${scheme.name}：${DecimalFormatters.formatSignedAmount(pnl)} USDT")
                     if (pnl != null) {
-                        appendLine("${scheme.name} 相对${main.name}：${DecimalFormatters.formatPositiveNegative(pnl - main.comparablePnlUsdt()!!)} USDT")
+                        appendLine("${scheme.name} 相对${main.name}：${DecimalFormatters.formatSignedAmount(pnl - main.comparablePnlUsdt()!!)} USDT")
                     }
                 }
             } else {
@@ -85,13 +85,13 @@ object ClipboardFormatter {
         result: AveragingDecisionResult
     ): String = buildString {
         appendLine("【补仓模拟】")
-        appendLine("补仓后成本：${DecimalFormatters.formatCurrency(result.newAveragePrice)}")
-        appendLine("回本价：${DecimalFormatters.formatCurrency(result.newAveragePrice)}")
+        appendLine("补仓后成本：${DecimalFormatters.formatPrice(result.newAveragePrice)}")
+        appendLine("回本价：${DecimalFormatters.formatPrice(result.newAveragePrice)}")
         input.targetExitPrice?.let {
-            appendLine("目标价收益：${DecimalFormatters.formatPositiveNegative(result.pnlAfterAdding)} USDT")
-            appendLine("相比不补仓：${DecimalFormatters.formatPositiveNegative(result.pnlChange)} USDT")
+            appendLine("目标价收益：${DecimalFormatters.formatSignedAmount(result.pnlAfterAdding)} USDT")
+            appendLine("相比不补仓：${DecimalFormatters.formatSignedAmount(result.pnlChange)} USDT")
         }
-        appendLine("均价改善：${DecimalFormatters.formatCurrency(result.averagePriceImprovement)} USDT")
+        appendLine("均价改善：${DecimalFormatters.formatPrice(result.averagePriceImprovement)} USDT")
         appendLine()
         append("说明：目标价收益仅在填写目标平仓价时提供。")
     }

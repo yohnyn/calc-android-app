@@ -26,7 +26,8 @@ class HistoryRepository(context: Context) {
                         savedAt = item.getLong("saved_at"),
                         favorite = item.optBoolean("favorite", false),
                         schemaVersion = item.optInt("schema_version", 1),
-                        sections = parseSections(item.getJSONArray("sections"))
+                        sections = parseSections(item.getJSONArray("sections")),
+                        fingerprint = item.optString("fingerprint").takeIf { it.isNotBlank() }
                     )
                 )
             }
@@ -45,6 +46,7 @@ class HistoryRepository(context: Context) {
                     .put("roi_summary", record.roiSummary)
                     .put("saved_at", record.savedAt)
                     .put("favorite", record.favorite)
+                    .put("fingerprint", record.fingerprint.orEmpty())
                     .put("schema_version", record.schemaVersion)
                     .put("sections", serializeSections(record.sections))
             )

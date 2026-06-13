@@ -13,3 +13,15 @@ data class AveragingDecisionInput(
     val addQuantity: BigDecimal? = null,
     val targetExitPrice: BigDecimal? = null
 )
+
+fun AveragingDecisionInput.stableFingerprint(): String = listOf(
+    side.name,
+    currentEntryPrice.canonicalFingerprint(),
+    currentQuantity.canonicalFingerprint(),
+    currentMargin.canonicalFingerprint(),
+    currentLeverage.canonicalFingerprint(),
+    addEntryPrice.canonicalFingerprint(),
+    addAmount.canonicalFingerprint(),
+    addQuantity.canonicalFingerprint(),
+    targetExitPrice.canonicalFingerprint()
+).joinToString("|")

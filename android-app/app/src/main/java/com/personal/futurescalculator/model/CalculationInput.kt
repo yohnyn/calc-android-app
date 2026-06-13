@@ -23,3 +23,28 @@ data class CalculationInput(
     val estimateLiquidation: Boolean = false,
     val calculateMaxOpen: Boolean = false
 )
+
+fun CalculationInput.stableFingerprint(): String = listOf(
+    side.name,
+    marginMode.name,
+    leverage.canonicalFingerprint(),
+    margin.canonicalFingerprint(),
+    entryPrice.canonicalFingerprint(),
+    exitPrice.canonicalFingerprint(),
+    quantity.canonicalFingerprint(),
+    openFeeRatePercent.canonicalFingerprint(),
+    closeFeeRatePercent.canonicalFingerprint(),
+    takeProfitPrice.canonicalFingerprint(),
+    stopLossPrice.canonicalFingerprint(),
+    targetProfitAmount.canonicalFingerprint(),
+    targetRoiPercent.canonicalFingerprint(),
+    maxLossAmount.canonicalFingerprint(),
+    maxLossRoiPercent.canonicalFingerprint(),
+    maintenanceMarginRatePercent.canonicalFingerprint(),
+    totalFunds.canonicalFingerprint(),
+    estimateLiquidation.toString(),
+    calculateMaxOpen.toString()
+).joinToString("|")
+
+internal fun BigDecimal?.canonicalFingerprint(): String =
+    this?.stripTrailingZeros()?.toPlainString().orEmpty()

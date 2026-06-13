@@ -21,6 +21,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -48,6 +49,9 @@ import com.personal.futurescalculator.model.PositionSide
 import com.personal.futurescalculator.model.SavedPlan
 import com.personal.futurescalculator.model.SettlementMode
 import com.personal.futurescalculator.ui.SectionPanel
+import com.personal.futurescalculator.ui.AppDropdownMenu
+import com.personal.futurescalculator.ui.AppDropdownMenuItemPadding
+import com.personal.futurescalculator.ui.AppDropdownMenuText
 import com.personal.futurescalculator.util.DecimalFormatters
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -272,7 +276,7 @@ fun HistoryScreen(
             HistoryCategoryButton(HistoryCategory.StopLossReverse.label, category == HistoryCategory.StopLossReverse, { category = HistoryCategory.StopLossReverse }, Modifier.weight(1f))
         }
         Text(
-            text = "主动查看计算结果后会保存快照，详情直接读取保存时数据。",
+            text = "查看完整结果后会自动加入记录，重复结果不会重复保存。",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -331,6 +335,7 @@ private fun PlanLibrarySection(
     var renameText by rememberSaveable { mutableStateOf("") }
     var planPendingNote by remember { mutableStateOf<SavedPlan?>(null) }
     var noteText by rememberSaveable { mutableStateOf("") }
+    var expandedPlanMenuId by rememberSaveable { mutableStateOf<String?>(null) }
     planPendingRename?.let { plan ->
         AlertDialog(
             onDismissRequest = { planPendingRename = null },
@@ -443,19 +448,89 @@ private fun PlanLibrarySection(
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
         ) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(plan.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        plan.name,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Box {
+                        TextButton(onClick = { expandedPlanMenuId = plan.id }) {
+                            Text("更多", fontWeight = FontWeight.SemiBold)
+                        }
+                        AppDropdownMenu(
+                            expanded = expandedPlanMenuId == plan.id,
+                            onDismissRequest = { expandedPlanMenuId = null }
+                        ) {
+                            DropdownMenuItem(
+                                text = { AppDropdownMenuText("带入补仓助手") },
+                                onClick = {
+                                    expandedPlanMenuId = null
+                                    onSendPlanToAveraging(plan)
+                                },
+                                contentPadding = AppDropdownMenuItemPadding
+                            )
+                            DropdownMenuItem(
+                                text = { AppDropdownMenuText("重命名") },
+                                onClick = {
+                                    expandedPlanMenuId = null
+                                    renameText = plan.name
+                                    planPendingRename = plan
+                                },
+                                contentPadding = AppDropdownMenuItemPadding
+                            )
+                            DropdownMenuItem(
+                                text = { AppDropdownMenuText("编辑备注") },
+                                onClick = {
+                                    expandedPlanMenuId = null
+                                    noteText = plan.note
+                                    planPendingNote = plan
+                                },
+                                contentPadding = AppDropdownMenuItemPadding
+                            )
+                            DropdownMenuItem(
+                                text = { AppDropdownMenuText("复制方案") },
+                                onClick = {
+                                    expandedPlanMenuId = null
+                                    onDuplicatePlan(plan)
+                                },
+                                contentPadding = AppDropdownMenuItemPadding
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        "删除方案",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                },
+                                onClick = {
+                                    expandedPlanMenuId = null
+                                    planPendingDelete = plan
+                                },
+                                contentPadding = AppDropdownMenuItemPadding
+                            )
+                        }
+                    }
+                }
                 Text(
-                    "${coin?.symbol ?: "币"} · ${if (plan.settlementMode == SettlementMode.UsdtMargined) "U 本位" else "币本位"} · ${plan.input.side.label()} · ${plan.input.marginMode.label()} · ${plan.input.leverage.stripTrailingZeros().toPlainString()}x",
+                    "${coin?.symbol ?: "币"} · ${if (plan.settlementMode == SettlementMode.UsdtMargined) "U 本位" else "币本位"} · ${plan.input.side.label()} · ${plan.input.marginMode.label()} · ${DecimalFormatters.formatLeverage(plan.input.leverage)}x",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    "开仓价 ${DecimalFormatters.formatCurrency(plan.input.entryPrice)} · 平仓价 ${DecimalFormatters.formatCurrency(plan.input.exitPrice)}",
+                    "开仓价 ${DecimalFormatters.formatPrice(plan.input.entryPrice)} · 平仓价 ${DecimalFormatters.formatPrice(plan.input.exitPrice)}",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    "保证金 ${DecimalFormatters.formatCurrency(plan.input.margin)} USDT · 杠杆 ${plan.input.leverage.stripTrailingZeros().toPlainString()}x",
+                    "保证金 ${DecimalFormatters.formatAmount(plan.input.margin)} USDT · 杠杆 ${DecimalFormatters.formatLeverage(plan.input.leverage)}x",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -473,35 +548,6 @@ private fun PlanLibrarySection(
                     }
                     HistorySoftOutlinedButton(onClick = { onAddPlanToComparison(plan) }, modifier = Modifier.weight(1f)) {
                         Text("加入对比")
-                    }
-                }
-                HistorySoftOutlinedButton(
-                    onClick = { onSendPlanToAveraging(plan) },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("带入补仓助手")
-                }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = {
-                        renameText = plan.name
-                        planPendingRename = plan
-                    }) {
-                        Text("重命名", fontWeight = FontWeight.SemiBold)
-                    }
-                    TextButton(onClick = {
-                        noteText = plan.note
-                        planPendingNote = plan
-                    }) {
-                        Text("备注", fontWeight = FontWeight.SemiBold)
-                    }
-                    TextButton(onClick = { onDuplicatePlan(plan) }) {
-                        Text("复制", fontWeight = FontWeight.SemiBold)
-                    }
-                    TextButton(
-                        onClick = { planPendingDelete = plan },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Text("删除", fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -524,7 +570,7 @@ private fun EmptyHistoryState() {
         ) {
             Text("暂无历史记录", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
-                "主动查看一次有效计算结果后会保存快照",
+                "查看完整结果后会自动加入记录，重复结果不会重复保存",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center

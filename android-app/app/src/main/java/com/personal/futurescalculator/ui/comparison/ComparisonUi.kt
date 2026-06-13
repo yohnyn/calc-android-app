@@ -63,6 +63,7 @@ import com.personal.futurescalculator.model.MarginMode
 import com.personal.futurescalculator.model.PositionSide
 import com.personal.futurescalculator.model.SavedPlan
 import com.personal.futurescalculator.model.SettlementMode
+import com.personal.futurescalculator.model.stableFingerprint
 import com.personal.futurescalculator.model.toComparisonItem
 import com.personal.futurescalculator.ui.CompactTextInput
 import com.personal.futurescalculator.ui.AppDropdownMenu
@@ -212,7 +213,7 @@ fun CopySchemeDialog(
                             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 Text("${scheme.name} · ${scheme.symbol}", fontWeight = FontWeight.Bold)
                                 Text(
-                                    "${scheme.input.side.label()} · ${scheme.input.leverage.stripTrailingZeros().toPlainString()}x · ${scheme.primaryPnlLabel()} ${scheme.primaryPnlText()}",
+                                    "${scheme.input.side.label()} · ${DecimalFormatters.formatLeverage(scheme.input.leverage)}x · ${scheme.primaryPnlLabel()} ${scheme.primaryPnlText()}",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -244,6 +245,7 @@ fun CopySchemeDialog(
 fun ComparisonResultDialog(
     schemes: List<ComparisonSchemeView>,
     baselineId: String,
+    onBaselineChange: (String) -> Unit,
     onCopySummary: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -267,6 +269,11 @@ fun ComparisonResultDialog(
                     "顶部差值按所选基准方案的平仓价净盈亏计算；止盈止损用于补充查看风险边界。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                ComparisonBaselineSelector(
+                    schemes = orderedSchemes,
+                    baselineId = mainScheme?.id,
+                    onBaselineChange = onBaselineChange
                 )
                 if (mainScheme != null && comparedSchemes.isNotEmpty()) {
                     comparedSchemes.forEach { scheme ->
@@ -300,7 +307,7 @@ fun ComparisonResultDialog(
                             comparedSchemes.forEach { scheme ->
                                 val diff = scheme.comparablePnlUsdt()!! - mainScheme.comparablePnlUsdt()!!
                                 Text(
-                                    text = "${scheme.name}: ${comparisonFormulaOperand(scheme.comparablePnlUsdt())} - ${comparisonFormulaOperand(mainScheme.comparablePnlUsdt())} = ${DecimalFormatters.formatPositiveNegative(diff)} USDT",
+                                    text = "${scheme.name}: ${comparisonFormulaOperand(scheme.comparablePnlUsdt())} - ${comparisonFormulaOperand(mainScheme.comparablePnlUsdt())} = ${DecimalFormatters.formatSignedAmount(diff)} USDT",
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -328,17 +335,61 @@ fun ComparisonResultDialog(
 }
 
 @Composable
+private fun ComparisonBaselineSelector(
+    schemes: List<ComparisonSchemeView>,
+    baselineId: String?,
+    onBaselineChange: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    BoxWithConstraints {
+        Surface(
+            modifier = Modifier.fillMaxWidth().clickable { expanded = true },
+            shape = MaterialTheme.shapes.small,
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.46f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "对比基准：${schemes.firstOrNull { it.id == baselineId }?.name ?: "请选择"}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                DropdownChevronIcon(iconSize = 16.dp)
+            }
+        }
+        AppDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.width(maxWidth)
+        ) {
+            schemes.forEach { scheme ->
+                DropdownMenuItem(
+                    text = { AppDropdownMenuText(scheme.name) },
+                    onClick = {
+                        expanded = false
+                        onBaselineChange(scheme.id)
+                    },
+                    contentPadding = AppDropdownMenuItemPadding
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun ComparisonSchemeListCard(
     scheme: ComparisonSchemeView,
     selected: Boolean,
     enabled: Boolean,
-    isBaseline: Boolean,
     onSelectedChange: (Boolean) -> Unit,
-    onSetBaseline: () -> Unit,
     onClick: (() -> Unit)?
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable(enabled = enabled) { onSelectedChange(!selected) },
         shape = MaterialTheme.shapes.small,
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
@@ -348,7 +399,7 @@ fun ComparisonSchemeListCard(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Checkbox(checked = selected, enabled = enabled, onCheckedChange = onSelectedChange)
+            Checkbox(checked = selected, enabled = enabled, onCheckedChange = null)
             CoinIcon(coin = scheme.coin, size = 32)
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
@@ -376,24 +427,12 @@ fun ComparisonSchemeListCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Column(horizontalAlignment = Alignment.End) {
-                if (enabled) {
-                    TextButton(onClick = onSetBaseline) {
-                        Text(
-                            if (isBaseline) "当前基准" else "设为基准",
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (isBaseline) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                if (!scheme.isMain && onClick != null) {
-                    TextButton(
-                        onClick = onClick,
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
-                    ) {
-                        Text("编辑", fontWeight = FontWeight.SemiBold)
-                    }
+            if (!scheme.isMain && onClick != null) {
+                TextButton(
+                    onClick = onClick,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Text("编辑", fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -419,6 +458,7 @@ fun ComparisonSchemeEditorDialog(
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val coin = coins.firstOrNull { it.id == item.coinId }
+    val missingFields = comparisonMissingFields(item.input)
     if (showCoinDialog) {
         ComparisonCoinSelectorDialog(
             coins = coins,
@@ -503,7 +543,12 @@ fun ComparisonSchemeEditorDialog(
                                 else -> "张"
                             }
                             Text(
-                                text = "仓位",
+                                text = when {
+                                    amountIsMargin -> "保证金"
+                                    item.settlementMode == SettlementMode.UsdtMargined -> "币数量"
+                                    item.coinMarginedCalculationMode == CoinMarginedCalculationMode.CoinQuantity -> "币数量"
+                                    else -> "合约张数"
+                                },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -549,13 +594,17 @@ fun ComparisonSchemeEditorDialog(
                             value = item.input.entryPrice,
                             onValueChange = { item = item.copy(input = item.input.copy(entryPrice = it)) },
                             label = "开仓价",
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            requirePositive = true,
+                            maxDecimalPlaces = 6
                         )
                         NumberInput(
                             value = item.input.exitPrice,
                             onValueChange = { item = item.copy(input = item.input.copy(exitPrice = it)) },
                             label = "平仓价",
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            requirePositive = true,
+                            maxDecimalPlaces = 6
                         )
                     }
                     if (item.settlementMode == SettlementMode.UsdtMargined) {
@@ -605,7 +654,9 @@ fun ComparisonSchemeEditorDialog(
                                         item = item.copy(input = item.input.copy(takeProfitPrice = it))
                                     },
                                     label = "止盈价",
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f),
+                                    requirePositive = true,
+                                    maxDecimalPlaces = 6
                                 )
                                 NumberInput(
                                     value = item.input.stopLossPrice,
@@ -613,11 +664,21 @@ fun ComparisonSchemeEditorDialog(
                                         item = item.copy(input = item.input.copy(stopLossPrice = it))
                                     },
                                     label = "止损价",
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f),
+                                    requirePositive = true,
+                                    maxDecimalPlaces = 6
                                 )
                             }
                         }
                     }
+                }
+                if (missingFields.isNotEmpty()) {
+                    Text(
+                        text = "还需填写：${missingFields.joinToString("、")}",
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
@@ -636,8 +697,9 @@ fun ComparisonSchemeEditorDialog(
                             keyboardController?.hide()
                             onSave(item.copy(name = item.name.ifBlank { "未命名方案" }))
                         },
+                        enabled = missingFields.isEmpty(),
                         shape = MaterialTheme.shapes.small
-                    ) { Text("保存") }
+                    ) { Text(if (showDelete) "保存修改" else "加入对比") }
                 }
             }
         }
@@ -689,7 +751,7 @@ fun PlanSelectionDialog(
                         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(plan.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             Text(
-                                "${coin?.symbol ?: "币"} · ${settlementModeLabel(plan.settlementMode)} · ${plan.input.side.label()} · ${plan.input.leverage.stripTrailingZeros().toPlainString()}x",
+                                "${coin?.symbol ?: "币"} · ${settlementModeLabel(plan.settlementMode)} · ${plan.input.side.label()} · ${DecimalFormatters.formatLeverage(plan.input.leverage)}x",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -709,7 +771,7 @@ fun createComparisonHistorySnapshot(schemes: List<ComparisonSchemeView>): Histor
     val differences = sorted.zipWithNext().map { (higher, lower) ->
         HistoryField(
             "${higher.name} 与 ${lower.name}",
-            "${higher.name} 多 ${DecimalFormatters.formatPositiveNegative(higher.comparablePnlUsdt()!! - lower.comparablePnlUsdt()!!)} USDT"
+            "${higher.name} 多 ${DecimalFormatters.formatSignedAmount(higher.comparablePnlUsdt()!! - lower.comparablePnlUsdt()!!)} USDT"
         )
     }
     return HistoryRecord(
@@ -719,33 +781,36 @@ fun createComparisonHistorySnapshot(schemes: List<ComparisonSchemeView>): Histor
         summary = schemes.firstOrNull()?.let { "${it.name} ${it.primaryPnlText()}" } ?: "无结果",
         roiSummary = null,
         savedAt = System.currentTimeMillis(),
+        fingerprint = schemes.map {
+            "${it.symbol}|${it.settlementMode.name}|${it.coinMarginedCalculationMode.name}|${it.input.stableFingerprint()}"
+        }.sorted().joinToString(separator = "|", prefix = "comparison|"),
         sections = schemes.map { scheme ->
             val fields = buildList {
                 add(HistoryField("结算模式", comparisonSettlementHistoryDisplay(scheme.settlementMode, scheme.coinMarginedCalculationMode)))
                 add(HistoryField("方向", scheme.input.side.label()))
                 add(HistoryField("模式", scheme.input.marginMode.label()))
-                add(HistoryField("杠杆", "${scheme.input.leverage.stripTrailingZeros().toPlainString()}x"))
-                add(HistoryField("保证金", "${DecimalFormatters.formatCurrency(scheme.result?.requiredMargin)} USDT"))
+                add(HistoryField("杠杆", "${DecimalFormatters.formatLeverage(scheme.input.leverage)}x"))
+                add(HistoryField("保证金", "${DecimalFormatters.formatAmount(scheme.result?.requiredMargin)} USDT"))
                 add(HistoryField("数量", "${DecimalFormatters.formatQuantity(scheme.result?.quantity)} ${scheme.symbol}"))
-                add(HistoryField("开仓价", "${DecimalFormatters.formatCurrency(scheme.input.entryPrice)} USDT"))
-                add(HistoryField("平仓价", "${DecimalFormatters.formatCurrency(scheme.input.exitPrice)} USDT"))
+                add(HistoryField("开仓价", "${DecimalFormatters.formatPrice(scheme.input.entryPrice)} USDT"))
+                add(HistoryField("平仓价", "${DecimalFormatters.formatPrice(scheme.input.exitPrice)} USDT"))
                 if (scheme.settlementMode == SettlementMode.UsdtMargined && scheme.input.takeProfitPrice != null) {
-                    add(HistoryField("止盈价", "${DecimalFormatters.formatCurrency(scheme.input.takeProfitPrice)} USDT"))
-                    add(HistoryField("止盈净收益", "${DecimalFormatters.formatPositiveNegative(scheme.result?.takeProfitNetPnl)} USDT"))
+                    add(HistoryField("止盈价", "${DecimalFormatters.formatPrice(scheme.input.takeProfitPrice)} USDT"))
+                    add(HistoryField("止盈净收益", "${DecimalFormatters.formatSignedAmount(scheme.result?.takeProfitNetPnl)} USDT"))
                 }
                 if (scheme.settlementMode == SettlementMode.UsdtMargined && scheme.input.stopLossPrice != null) {
-                    add(HistoryField("止损价", "${DecimalFormatters.formatCurrency(scheme.input.stopLossPrice)} USDT"))
-                    add(HistoryField("止损净亏损", "${DecimalFormatters.formatPositiveNegative(scheme.result?.stopLossNetPnl)} USDT"))
+                    add(HistoryField("止损价", "${DecimalFormatters.formatPrice(scheme.input.stopLossPrice)} USDT"))
+                    add(HistoryField("止损净亏损", "${DecimalFormatters.formatSignedAmount(scheme.result?.stopLossNetPnl)} USDT"))
                 }
                 if (scheme.settlementMode == SettlementMode.UsdtMargined && scheme.result?.rewardRiskRatio != null) {
-                    add(HistoryField("盈亏比", DecimalFormatters.formatQuantity(scheme.result.rewardRiskRatio)))
+                    add(HistoryField("盈亏比", DecimalFormatters.formatRatio(scheme.result.rewardRiskRatio)))
                 }
                 add(HistoryField(scheme.primaryPnlLabel(), scheme.primaryPnlText()))
-                add(HistoryField("折算收益", "${DecimalFormatters.formatPositiveNegative(scheme.comparablePnlUsdt())} USDT"))
+                add(HistoryField("折算收益", "${DecimalFormatters.formatSignedAmount(scheme.comparablePnlUsdt())} USDT"))
                 add(HistoryField("保证金收益率（ROI）", if (scheme.settlementMode == SettlementMode.UsdtMargined) DecimalFormatters.formatPercentage(scheme.result?.roiPercent) else "不适用"))
-                add(HistoryField("手续费", if (scheme.settlementMode == SettlementMode.UsdtMargined) "${DecimalFormatters.formatCurrency(scheme.result?.totalFee)} USDT" else "不适用"))
+                add(HistoryField("手续费", if (scheme.settlementMode == SettlementMode.UsdtMargined) "${DecimalFormatters.formatAmount(scheme.result?.totalFee)} USDT" else "不适用"))
                 if (scheme.input.estimateLiquidation && scheme.result?.liquidationPrice != null) {
-                    add(HistoryField("强平价格", "${DecimalFormatters.formatCurrency(scheme.result.liquidationPrice)} USDT"))
+                    add(HistoryField("强平价格", "${DecimalFormatters.formatPrice(scheme.result.liquidationPrice)} USDT"))
                 }
             }
             HistorySection("${scheme.name} · ${scheme.symbol}", fields)
@@ -796,7 +861,7 @@ fun ComparisonItemCard(
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        text = "${coin?.symbol ?: "币"} · ${item.input.side.label()} · ${item.input.marginMode.label()} · ${item.input.leverage.stripTrailingZeros().toPlainString()}x",
+                        text = "${coin?.symbol ?: "币"} · ${item.input.side.label()} · ${item.input.marginMode.label()} · ${DecimalFormatters.formatLeverage(item.input.leverage)}x",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -845,7 +910,9 @@ fun ComparisonItemCard(
                         )
                     },
                     label = "保证金",
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    requirePositive = true,
+                    maxDecimalPlaces = 2
                 )
                 NumberInput(
                     value = item.input.entryPrice,
@@ -853,7 +920,9 @@ fun ComparisonItemCard(
                         onChange(item.copy(input = item.input.copy(entryPrice = entryPrice)))
                     },
                     label = "开仓价",
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    requirePositive = true,
+                    maxDecimalPlaces = 6
                 )
             }
             ComparisonInputRow {
@@ -873,7 +942,9 @@ fun ComparisonItemCard(
                         )
                     },
                     label = "平仓价",
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    requirePositive = true,
+                    maxDecimalPlaces = 6
                 )
                 NumberInput(
                     value = item.input.quantity,
@@ -886,14 +957,16 @@ fun ComparisonItemCard(
                         )
                     },
                     label = "${coin?.symbol ?: "币"} 数量",
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    requirePositive = true,
+                    maxDecimalPlaces = 6
                 )
             }
 
             if (result != null) {
                 MetricTile(
                     label = "净盈亏",
-                    value = "${pnlText(result.netPnl, DecimalFormatters.formatCurrency(result.netPnl))} USDT",
+                    value = "${pnlText(result.netPnl, DecimalFormatters.formatSignedAmount(result.netPnl))} USDT",
                     valueColor = pnlColor(result.netPnl)
                 )
             } else {
@@ -957,7 +1030,7 @@ private fun ComparisonSettlementDropdown(
 ) {
     BoxWithConstraints(modifier = modifier) {
         Surface(
-            modifier = Modifier.fillMaxWidth().height(52.dp).clickable { onExpandedChange(true) },
+            modifier = Modifier.fillMaxWidth().height(48.dp).clickable { onExpandedChange(true) },
             shape = MaterialTheme.shapes.small,
             color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
@@ -1207,7 +1280,7 @@ private fun ComparisonSchemeSummary(scheme: ComparisonSchemeView) {
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        text = "${scheme.input.side.label()} · ${scheme.input.marginMode.label()} · ${scheme.input.leverage.stripTrailingZeros().toPlainString()}x · ${comparisonSettlementHistoryDisplay(scheme.settlementMode, scheme.coinMarginedCalculationMode)}",
+                        text = "${scheme.input.side.label()} · ${scheme.input.marginMode.label()} · ${DecimalFormatters.formatLeverage(scheme.input.leverage)}x · ${comparisonSettlementHistoryDisplay(scheme.settlementMode, scheme.coinMarginedCalculationMode)}",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1233,32 +1306,32 @@ private fun ComparisonSchemeSummary(scheme: ComparisonSchemeView) {
                 if (scheme.settlementMode == SettlementMode.CoinMargined) {
                     MetricTile(
                         label = "折算收益",
-                        value = "${pnlText(scheme.comparablePnlUsdt(), DecimalFormatters.formatPositiveNegative(scheme.comparablePnlUsdt()))} USDT",
+                        value = "${pnlText(scheme.comparablePnlUsdt(), DecimalFormatters.formatSignedAmount(scheme.comparablePnlUsdt()))} USDT",
                         valueColor = pnlColor(scheme.comparablePnlUsdt())
                     )
                 }
                 ComparisonInputRow {
                     MetricTile(
                         label = "开仓价",
-                        value = "${DecimalFormatters.formatCurrency(scheme.input.entryPrice)} USDT",
+                        value = "${DecimalFormatters.formatPrice(scheme.input.entryPrice)} USDT",
                         modifier = Modifier.weight(1f)
                     )
                     MetricTile(
                         label = "平仓价",
-                        value = "${DecimalFormatters.formatCurrency(scheme.input.exitPrice)} USDT",
+                        value = "${DecimalFormatters.formatPrice(scheme.input.exitPrice)} USDT",
                         modifier = Modifier.weight(1f)
                     )
                 }
                 ComparisonInputRow {
                     MetricTile(
                         label = if (scheme.input.margin != null) "保证金" else "${scheme.symbol} 数量",
-                        value = scheme.input.margin?.let { "${DecimalFormatters.formatCurrency(it)} USDT" }
+                        value = scheme.input.margin?.let { "${DecimalFormatters.formatAmount(it)} USDT" }
                             ?: "${DecimalFormatters.formatQuantity(scheme.input.quantity)} ${scheme.symbol}",
                         modifier = Modifier.weight(1f)
                     )
                     MetricTile(
                         label = "仓位价值",
-                        value = "${DecimalFormatters.formatCurrency(scheme.result?.positionValue)} USDT",
+                        value = "${DecimalFormatters.formatAmount(scheme.result?.positionValue)} USDT",
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -1272,7 +1345,7 @@ private fun ComparisonSchemeSummary(scheme: ComparisonSchemeView) {
                         )
                         MetricTile(
                             label = "手续费估算",
-                            value = "${DecimalFormatters.formatCurrency(scheme.result?.totalFee)} USDT",
+                            value = "${DecimalFormatters.formatAmount(scheme.result?.totalFee)} USDT",
                             modifier = Modifier.weight(1f)
                         )
                     } else {
@@ -1283,7 +1356,7 @@ private fun ComparisonSchemeSummary(scheme: ComparisonSchemeView) {
                         )
                         MetricTile(
                             label = "折算收益",
-                            value = "${DecimalFormatters.formatPositiveNegative(scheme.comparablePnlUsdt())} USDT",
+                            value = "${DecimalFormatters.formatSignedAmount(scheme.comparablePnlUsdt())} USDT",
                             valueColor = pnlColor(scheme.comparablePnlUsdt()),
                             modifier = Modifier.weight(1f)
                         )
@@ -1292,7 +1365,7 @@ private fun ComparisonSchemeSummary(scheme: ComparisonSchemeView) {
                 if (scheme.settlementMode == SettlementMode.UsdtMargined) {
                     MetricTile(
                         label = "未扣手续费盈亏",
-                        value = "${DecimalFormatters.formatCurrency(scheme.result?.grossPnl)} USDT",
+                        value = "${DecimalFormatters.formatSignedAmount(scheme.result?.grossPnl)} USDT",
                         valueColor = pnlColor(scheme.result?.grossPnl)
                     )
                 }
@@ -1304,8 +1377,8 @@ private fun ComparisonSchemeSummary(scheme: ComparisonSchemeView) {
                         scheme.input.takeProfitPrice?.let { takeProfitPrice ->
                             MetricTile(
                                 label = "止盈价",
-                                value = "${DecimalFormatters.formatCurrency(takeProfitPrice)} USDT",
-                                supporting = "净收益 ${DecimalFormatters.formatPositiveNegative(scheme.result?.takeProfitNetPnl)} USDT",
+                                value = "${DecimalFormatters.formatPrice(takeProfitPrice)} USDT",
+                                supporting = "净收益 ${DecimalFormatters.formatSignedAmount(scheme.result?.takeProfitNetPnl)} USDT",
                                 valueColor = pnlColor(scheme.result?.takeProfitNetPnl),
                                 modifier = Modifier.weight(1f)
                             )
@@ -1313,8 +1386,8 @@ private fun ComparisonSchemeSummary(scheme: ComparisonSchemeView) {
                         scheme.input.stopLossPrice?.let { stopLossPrice ->
                             MetricTile(
                                 label = "止损价",
-                                value = "${DecimalFormatters.formatCurrency(stopLossPrice)} USDT",
-                                supporting = "净亏损 ${DecimalFormatters.formatPositiveNegative(scheme.result?.stopLossNetPnl)} USDT",
+                                value = "${DecimalFormatters.formatPrice(stopLossPrice)} USDT",
+                                supporting = "净亏损 ${DecimalFormatters.formatSignedAmount(scheme.result?.stopLossNetPnl)} USDT",
                                 valueColor = pnlColor(scheme.result?.stopLossNetPnl),
                                 modifier = Modifier.weight(1f)
                             )
@@ -1323,7 +1396,7 @@ private fun ComparisonSchemeSummary(scheme: ComparisonSchemeView) {
                     scheme.result?.rewardRiskRatio?.let { ratio ->
                         MetricTile(
                             label = "盈亏比",
-                            value = DecimalFormatters.formatQuantity(ratio)
+                            value = DecimalFormatters.formatRatio(ratio)
                         )
                     }
                 }
@@ -1331,7 +1404,7 @@ private fun ComparisonSchemeSummary(scheme: ComparisonSchemeView) {
                     comparisonLiquidationPrice(scheme.input, scheme.result)?.let {
                         MetricTile(
                             label = "强平价格",
-                            value = "${DecimalFormatters.formatCurrency(it)} USDT"
+                            value = "${DecimalFormatters.formatPrice(it)} USDT"
                         )
                     }
                 }
@@ -1374,7 +1447,7 @@ private fun ComparisonDifferenceCard(
             SchemePnlRow(lower)
             Text("收益差距", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
-                text = "${pnlText(diff, DecimalFormatters.formatPositiveNegative(diff))} USDT",
+                text = "${pnlText(diff, DecimalFormatters.formatSignedAmount(diff))} USDT",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = pnlColor(diff)
@@ -1405,7 +1478,7 @@ private fun ComparisonRelativeDiffCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                text = "${pnlText(diff, DecimalFormatters.formatPositiveNegative(diff))} USDT",
+                text = "${pnlText(diff, DecimalFormatters.formatSignedAmount(diff))} USDT",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = pnlColor(diff)
@@ -1463,18 +1536,25 @@ private fun ComparisonSchemeView.primaryPnlLabel(): String = when (settlementMod
 
 private fun ComparisonSchemeView.primaryPnlText(): String = when (settlementMode) {
     SettlementMode.UsdtMargined ->
-        "${DecimalFormatters.formatPositiveNegative(result?.netPnl)} USDT"
+        "${DecimalFormatters.formatSignedAmount(result?.netPnl)} USDT"
 
     SettlementMode.CoinMargined ->
-        "${DecimalFormatters.formatPositiveNegative(coinMarginedResult?.pnlCoin)} $symbol"
+        "${DecimalFormatters.formatSignedCoinAmount(coinMarginedResult?.pnlCoin)} $symbol"
 }
 
 private fun comparisonFormulaOperand(value: BigDecimal?): String {
-    val formatted = DecimalFormatters.formatPositiveNegative(value)
+    val formatted = DecimalFormatters.formatFormulaAmount(value)
     return if (value != null && value < BigDecimal.ZERO) "($formatted)" else formatted
 }
 
 private fun comparisonMissingFields(input: CalculationInput): List<String> = buildList {
+    if (
+        input.leverage < BigDecimal.ONE ||
+        input.leverage > BigDecimal("125") ||
+        input.leverage.stripTrailingZeros().scale() > 0
+    ) {
+        add("有效整数杠杆")
+    }
     if (input.entryPrice == null || input.entryPrice <= BigDecimal.ZERO) add("开仓价")
     if (input.exitPrice == null || input.exitPrice <= BigDecimal.ZERO) add("平仓价")
     if (

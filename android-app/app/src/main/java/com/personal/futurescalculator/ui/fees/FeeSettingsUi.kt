@@ -70,19 +70,22 @@ fun FeeSettingsDialog(
                         value = openFee,
                         onValueChange = { openFee = it ?: BigDecimal.ZERO },
                         label = "开仓费率 %",
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        maxDecimalPlaces = 4
                     )
                     NumberInput(
                         value = closeFee,
                         onValueChange = { closeFee = it ?: BigDecimal.ZERO },
                         label = "平仓费率 %",
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        maxDecimalPlaces = 4
                     )
                 }
                 NumberInput(
                     value = maintenanceMarginRate,
                     onValueChange = { maintenanceMarginRate = it ?: BigDecimal.ZERO },
-                    label = "维持保证金率 %"
+                    label = "维持保证金率 %",
+                    maxDecimalPlaces = 4
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),

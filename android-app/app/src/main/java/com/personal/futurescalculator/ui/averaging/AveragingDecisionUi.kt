@@ -65,7 +65,14 @@ data class ExistingScheme(
 fun averagingMissingFields(input: AveragingDecisionInput): List<String> = buildList {
     if (input.currentEntryPrice == null || input.currentEntryPrice <= BigDecimal.ZERO) add("当前均价")
     if (input.currentQuantity == null || input.currentQuantity <= BigDecimal.ZERO) add("当前币数量")
-    if (input.currentLeverage == null || input.currentLeverage <= BigDecimal.ZERO) add("当前杠杆")
+    if (
+        input.currentLeverage == null ||
+        input.currentLeverage < BigDecimal.ONE ||
+        input.currentLeverage > BigDecimal("125") ||
+        input.currentLeverage.stripTrailingZeros().scale() > 0
+    ) {
+        add("有效整数杠杆")
+    }
     if (input.addEntryPrice == null || input.addEntryPrice <= BigDecimal.ZERO) add("补仓价格")
     if (
         (input.addAmount == null || input.addAmount <= BigDecimal.ZERO) &&
@@ -120,8 +127,8 @@ fun AveragingDecisionEntryCard(
             }
             Text(
                 text = when {
-                    result != null -> "补仓后均价 ${DecimalFormatters.formatCurrency(result.newAveragePrice)} · 新增保证金 ${DecimalFormatters.formatCurrency(result.addAmount)} USDT"
-                    input.currentEntryPrice != null -> "$symbol · ${input.side.label()} · ${DecimalFormatters.formatQuantity(input.currentLeverage)}x · 均价 ${DecimalFormatters.formatCurrency(input.currentEntryPrice)}"
+                    result != null -> "补仓后均价 ${DecimalFormatters.formatPrice(result.newAveragePrice)} · 新增保证金 ${DecimalFormatters.formatAmount(result.addAmount)} USDT"
+                    input.currentEntryPrice != null -> "$symbol · ${input.side.label()} · ${DecimalFormatters.formatLeverage(input.currentLeverage)}x · 均价 ${DecimalFormatters.formatPrice(input.currentEntryPrice)}"
                     else -> "模拟补仓后的均价、资金与仓位变化"
                 },
                 style = MaterialTheme.typography.labelMedium,
@@ -226,7 +233,9 @@ fun AveragingDecisionSection(
             NumberInput(
                 value = input.addEntryPrice,
                 onValueChange = { onInputChange(input.copy(addEntryPrice = it)) },
-                label = "补仓价格"
+                label = "补仓价格",
+                requirePositive = true,
+                maxDecimalPlaces = 6
             )
             AveragingAmountModeSelector(
                 useQuantity = useAddQuantity,
@@ -243,7 +252,9 @@ fun AveragingDecisionSection(
                 NumberInput(
                     value = input.addQuantity,
                     onValueChange = { onInputChange(input.copy(addQuantity = it, addAmount = null)) },
-                    label = "补仓币数量 $symbol"
+                    label = "补仓币数量 $symbol",
+                    requirePositive = true,
+                    maxDecimalPlaces = 6
                 )
             } else {
                 Text(
@@ -259,7 +270,9 @@ fun AveragingDecisionSection(
                 NumberInput(
                     value = input.addAmount,
                     onValueChange = { onInputChange(input.copy(addAmount = it, addQuantity = null)) },
-                    label = "补仓金额 USDT"
+                    label = "补仓金额 USDT",
+                    requirePositive = true,
+                    maxDecimalPlaces = 2
                 )
                 input.addAmount?.takeIf { it > BigDecimal.ZERO }?.let { amount ->
                     val currentMargin = input.currentMargin
@@ -271,9 +284,9 @@ fun AveragingDecisionSection(
                     }
                     Text(
                         text = buildString {
-                            append("本次增加 ${DecimalFormatters.formatCurrency(amount)} USDT")
-                            totalMargin?.let { append(" · 总保证金 ${DecimalFormatters.formatCurrency(it)} USDT") }
-                            multiple?.let { append(" · 约 ${it.stripTrailingZeros().toPlainString()} 倍") }
+                            append("本次增加 ${DecimalFormatters.formatAmount(amount)} USDT")
+                            totalMargin?.let { append(" · 总保证金 ${DecimalFormatters.formatAmount(it)} USDT") }
+                            multiple?.let { append(" · 约 ${DecimalFormatters.formatRatio(it)} 倍") }
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -299,7 +312,9 @@ fun AveragingDecisionSection(
             NumberInput(
                 value = input.targetExitPrice,
                 onValueChange = { onInputChange(input.copy(targetExitPrice = it)) },
-                label = "目标平仓价"
+                label = "目标平仓价",
+                requirePositive = true,
+                maxDecimalPlaces = 6
             )
             Button(
                 onClick = onRequestResult,
@@ -355,12 +370,12 @@ private fun CurrentPositionCard(
                     )
                 } else {
                     Text(
-                        text = "${input.side.label()} · ${DecimalFormatters.formatQuantity(input.currentLeverage)}x · 均价 ${DecimalFormatters.formatCurrency(input.currentEntryPrice)}",
+                        text = "${input.side.label()} · ${DecimalFormatters.formatLeverage(input.currentLeverage)}x · 均价 ${DecimalFormatters.formatPrice(input.currentEntryPrice)}",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        text = "数量 ${DecimalFormatters.formatDetailedQuantity(input.currentQuantity)} $symbol · 保证金 ${DecimalFormatters.formatCurrency(input.currentMargin)} USDT",
+                        text = "数量 ${DecimalFormatters.formatCoinAmount(input.currentQuantity)} $symbol · 保证金 ${DecimalFormatters.formatAmount(input.currentMargin)} USDT",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -490,7 +505,9 @@ private fun AveragingPositionEditorDialog(
                     NumberInput(
                         value = draft.currentEntryPrice,
                         onValueChange = { draft = draft.copy(currentEntryPrice = it) },
-                        label = "当前均价"
+                        label = "当前均价",
+                        requirePositive = true,
+                        maxDecimalPlaces = 6
                     )
                 }
                 Row(
@@ -519,7 +536,14 @@ private fun AveragingPositionEditorDialog(
 private fun AveragingDecisionInput.normalizedCurrentPosition(amountField: AmountField): AveragingDecisionInput {
     val price = currentEntryPrice
     val leverage = currentLeverage
-    if (price == null || price <= BigDecimal.ZERO || leverage == null || leverage <= BigDecimal.ZERO) {
+    if (
+        price == null ||
+        price <= BigDecimal.ZERO ||
+        leverage == null ||
+        leverage < BigDecimal.ONE ||
+        leverage > BigDecimal("125") ||
+        leverage.stripTrailingZeros().scale() > 0
+    ) {
         return when (amountField) {
             AmountField.Margin -> copy(currentQuantity = null)
             AmountField.Quantity -> copy(currentMargin = null)
@@ -657,26 +681,26 @@ private fun AveragingInlinePreview(
         Text("补仓后预览", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         AveragingMetricTile(
             label = "补仓后均价 / 回本价",
-            value = "${DecimalFormatters.formatCurrency(result.newAveragePrice)} USDT",
+            value = "${DecimalFormatters.formatPrice(result.newAveragePrice)} USDT",
             emphasized = true
         )
         AveragingInputRow {
             AveragingMetricTile(
                 label = "均价改善",
-                value = "${DecimalFormatters.formatCurrency(result.averagePriceImprovement)} USDT",
+                value = "${DecimalFormatters.formatPrice(result.averagePriceImprovement)} USDT",
                 supporting = improvementPercent?.let { DecimalFormatters.formatPercentage(it) },
                 modifier = Modifier.weight(1f)
             )
             AveragingMetricTile(
                 label = "新增保证金",
-                value = "${DecimalFormatters.formatCurrency(result.addAmount)} USDT",
+                value = "${DecimalFormatters.formatAmount(result.addAmount)} USDT",
                 modifier = Modifier.weight(1f)
             )
         }
         Text(
             text = buildString {
-                append("补仓后持有 ${DecimalFormatters.formatDetailedQuantity(result.newQuantity)} $symbol")
-                positionMultiple?.let { append(" · 仓位约扩大至 ${it.stripTrailingZeros().toPlainString()} 倍") }
+                append("补仓后持有 ${DecimalFormatters.formatCoinAmount(result.newQuantity)} $symbol")
+                positionMultiple?.let { append(" · 仓位约扩大至 ${DecimalFormatters.formatRatio(it)} 倍") }
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -778,16 +802,16 @@ private fun SchemeSelectionDialog(
                                 color = MaterialTheme.colorScheme.secondary
                             )
                             Text(
-                                text = "${scheme.input.side.label()} · ${scheme.input.leverage.stripTrailingZeros().toPlainString()}x",
+                                text = "${scheme.input.side.label()} · ${DecimalFormatters.formatLeverage(scheme.input.leverage)}x",
                                 style = MaterialTheme.typography.labelLarge
                             )
                             Text(
-                                text = "开仓价 ${DecimalFormatters.formatCurrency(scheme.input.entryPrice)} USDT · ${scheme.symbol} 数量 ${DecimalFormatters.formatDetailedQuantity(scheme.result.quantity)}",
+                                text = "开仓价 ${DecimalFormatters.formatPrice(scheme.input.entryPrice)} USDT · ${scheme.symbol} 数量 ${DecimalFormatters.formatCoinAmount(scheme.result.quantity)}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "保证金 ${DecimalFormatters.formatCurrency(scheme.result.requiredMargin)} USDT",
+                                text = "保证金 ${DecimalFormatters.formatAmount(scheme.result.requiredMargin)} USDT",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -810,21 +834,21 @@ private fun AveragingInputDetails(input: AveragingDecisionInput, symbol: String)
     SectionPanel(title = "详细数据") {
         Text(input.side.label(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         AveragingInputRow {
-            AveragingMetricTile("当前均价", "${DecimalFormatters.formatCurrency(input.currentEntryPrice)} USDT", modifier = Modifier.weight(1f))
-            AveragingMetricTile("当前 $symbol 数量", "${DecimalFormatters.formatDetailedQuantity(input.currentQuantity)} $symbol", modifier = Modifier.weight(1f))
+            AveragingMetricTile("当前均价", "${DecimalFormatters.formatPrice(input.currentEntryPrice)} USDT", modifier = Modifier.weight(1f))
+            AveragingMetricTile("当前 $symbol 数量", "${DecimalFormatters.formatCoinAmount(input.currentQuantity)} $symbol", modifier = Modifier.weight(1f))
         }
         AveragingInputRow {
-            AveragingMetricTile("当前保证金", "${DecimalFormatters.formatCurrency(input.currentMargin)} USDT", modifier = Modifier.weight(1f))
-            AveragingMetricTile("当前杠杆", "${DecimalFormatters.formatQuantity(input.currentLeverage)}x", modifier = Modifier.weight(1f))
+            AveragingMetricTile("当前保证金", "${DecimalFormatters.formatAmount(input.currentMargin)} USDT", modifier = Modifier.weight(1f))
+            AveragingMetricTile("当前杠杆", "${DecimalFormatters.formatLeverage(input.currentLeverage)}x", modifier = Modifier.weight(1f))
         }
         AveragingInputRow {
-            AveragingMetricTile("补仓价格", "${DecimalFormatters.formatCurrency(input.addEntryPrice)} USDT", modifier = Modifier.weight(1f))
-            AveragingMetricTile("目标平仓价", "${DecimalFormatters.formatCurrency(input.targetExitPrice)} USDT", modifier = Modifier.weight(1f))
+            AveragingMetricTile("补仓价格", "${DecimalFormatters.formatPrice(input.addEntryPrice)} USDT", modifier = Modifier.weight(1f))
+            AveragingMetricTile("目标平仓价", "${DecimalFormatters.formatPrice(input.targetExitPrice)} USDT", modifier = Modifier.weight(1f))
         }
         AveragingMetricTile(
             label = if (input.addAmount != null) "补仓金额" else "补仓 $symbol 数量",
-            value = input.addAmount?.let { "${DecimalFormatters.formatCurrency(it)} USDT" }
-                ?: "${DecimalFormatters.formatDetailedQuantity(input.addQuantity)} $symbol"
+            value = input.addAmount?.let { "${DecimalFormatters.formatAmount(it)} USDT" }
+                ?: "${DecimalFormatters.formatCoinAmount(input.addQuantity)} $symbol"
         )
     }
 }
@@ -854,20 +878,20 @@ private fun AveragingDecisionResultCard(
         ) {
             AveragingMetricTile(
                 label = "补仓后成本 / 回本价",
-                value = "${DecimalFormatters.formatCurrency(result.newAveragePrice)} USDT",
+                value = "${DecimalFormatters.formatPrice(result.newAveragePrice)} USDT",
                 emphasized = true
             )
             result.pnlAfterAdding?.let {
                 AveragingMetricTile(
                     label = "目标价收益",
-                    value = "${averagingPnlText(it, DecimalFormatters.formatPositiveNegative(it))} USDT",
+                    value = "${averagingPnlText(it, DecimalFormatters.formatSignedAmount(it))} USDT",
                     valueColor = averagingPnlColor(it)
                 )
             }
             result.pnlChange?.let {
                 AveragingMetricTile(
                     label = "相比不补仓",
-                    value = "${averagingPnlText(it, DecimalFormatters.formatPositiveNegative(it))} USDT",
+                    value = "${averagingPnlText(it, DecimalFormatters.formatSignedAmount(it))} USDT",
                     valueColor = changeColor
                 )
             }
@@ -876,16 +900,16 @@ private fun AveragingDecisionResultCard(
             }
             if (detailsExpanded) {
                 AveragingInputRow {
-                    AveragingMetricTile("补仓数量", "${DecimalFormatters.formatDetailedQuantity(result.quantityIncrease)} $symbol", modifier = Modifier.weight(1f))
-                    AveragingMetricTile("补仓金额", "${DecimalFormatters.formatCurrency(result.addAmount)} USDT", modifier = Modifier.weight(1f))
+                    AveragingMetricTile("补仓数量", "${DecimalFormatters.formatCoinAmount(result.quantityIncrease)} $symbol", modifier = Modifier.weight(1f))
+                    AveragingMetricTile("补仓金额", "${DecimalFormatters.formatAmount(result.addAmount)} USDT", modifier = Modifier.weight(1f))
                 }
                 AveragingInputRow {
-                    AveragingMetricTile("新仓位价值", "${DecimalFormatters.formatCurrency(newPositionValue)} USDT", modifier = Modifier.weight(1f))
-                    AveragingMetricTile("当前杠杆", "${DecimalFormatters.formatQuantity(input.currentLeverage)}x", modifier = Modifier.weight(1f))
+                    AveragingMetricTile("新仓位价值", "${DecimalFormatters.formatAmount(newPositionValue)} USDT", modifier = Modifier.weight(1f))
+                    AveragingMetricTile("当前杠杆", "${DecimalFormatters.formatLeverage(input.currentLeverage)}x", modifier = Modifier.weight(1f))
                 }
                 AveragingInputRow {
-                    AveragingMetricTile("当前均价", "${DecimalFormatters.formatCurrency(input.currentEntryPrice)} USDT", modifier = Modifier.weight(1f))
-                    AveragingMetricTile("当前保证金", "${DecimalFormatters.formatCurrency(input.currentMargin)} USDT", modifier = Modifier.weight(1f))
+                    AveragingMetricTile("当前均价", "${DecimalFormatters.formatPrice(input.currentEntryPrice)} USDT", modifier = Modifier.weight(1f))
+                    AveragingMetricTile("当前保证金", "${DecimalFormatters.formatAmount(input.currentMargin)} USDT", modifier = Modifier.weight(1f))
                 }
                 targetRoi?.let {
                     AveragingMetricTile("保证金收益率（ROI）", DecimalFormatters.formatPercentage(it))

@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.personal.futurescalculator.model.CoinMarginedCalculationMode
 import com.personal.futurescalculator.model.CopyFormat
@@ -103,6 +104,10 @@ fun SettingsScreen(
             onBack = { page = SettingsPage.Main }
         )
         SettingsPage.Main -> SettingsHome(
+            pnlDisplayMode = pnlDisplayMode,
+            themeMode = themeMode,
+            coinMarginedCalculationMode = coinMarginedCalculationMode,
+            copyFormat = copyFormat,
             onOpenPage = { page = it },
             onBack = onBack
         )
@@ -124,6 +129,10 @@ private enum class SettingsPage {
 
 @Composable
 private fun SettingsHome(
+    pnlDisplayMode: PnlDisplayMode,
+    themeMode: ThemeMode,
+    coinMarginedCalculationMode: CoinMarginedCalculationMode,
+    copyFormat: CopyFormat,
     onOpenPage: (SettingsPage) -> Unit,
     onBack: () -> Unit
 ) {
@@ -144,14 +153,16 @@ private fun SettingsHome(
                 fontWeight = FontWeight.Bold
             )
             SectionPanel(title = "外观") {
-                SettingsMenuButton("App主题") { onOpenPage(SettingsPage.AppTheme) }
-                SettingsMenuButton("盈亏配色") { onOpenPage(SettingsPage.PnlColor) }
+                SettingsMenuButton("App主题", themeMode.settingsLabel()) { onOpenPage(SettingsPage.AppTheme) }
+                SettingsMenuButton("盈亏配色", pnlDisplayMode.settingsLabel()) { onOpenPage(SettingsPage.PnlColor) }
             }
             SectionPanel(title = "币本位") {
-                SettingsMenuButton("币本位默认模式") { onOpenPage(SettingsPage.CoinMarginedMode) }
+                SettingsMenuButton("币本位默认模式", coinMarginedCalculationMode.label) {
+                    onOpenPage(SettingsPage.CoinMarginedMode)
+                }
             }
             SectionPanel(title = "复制与分享") {
-                SettingsMenuButton("复制默认格式") { onOpenPage(SettingsPage.CopyFormat) }
+                SettingsMenuButton("复制默认格式", copyFormat.label) { onOpenPage(SettingsPage.CopyFormat) }
             }
             SectionPanel(title = "反馈") {
                 SettingsMenuButton("用户反馈") { onOpenPage(SettingsPage.Feedback) }
@@ -420,16 +431,58 @@ private fun ThemeModeButton(
 }
 
 @Composable
-private fun SettingsMenuButton(title: String, onClick: () -> Unit) {
+private fun SettingsMenuButton(title: String, currentValue: String? = null, onClick: () -> Unit) {
     SettingsSoftOutlinedButton(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.small
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                currentValue?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Text(
+                    text = "›",
+                    modifier = Modifier.padding(start = if (currentValue == null) 0.dp else 6.dp),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
+}
+
+private fun ThemeMode.settingsLabel(): String = when (this) {
+    ThemeMode.System -> "跟随系统"
+    ThemeMode.Light -> "浅色"
+    ThemeMode.Dark -> "深色"
+}
+
+private fun PnlDisplayMode.settingsLabel(): String = when (this) {
+    PnlDisplayMode.ProfitGreen -> "盈利绿 · 亏损红"
+    PnlDisplayMode.ProfitRed -> "盈利红 · 亏损绿"
+    PnlDisplayMode.IconsOnly -> "仅图标区分"
 }
 
 @Composable

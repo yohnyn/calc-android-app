@@ -100,14 +100,14 @@ fun HomeBottomActions(
             modifier = Modifier.weight(1f),
             shape = MaterialTheme.shapes.small
         ) {
-            Text("历史记录")
+            Text("记录")
         }
         HomeSoftOutlinedButton(
             onClick = onPlanClick,
             modifier = Modifier.weight(1f),
             shape = MaterialTheme.shapes.small
         ) {
-            Text("方案库")
+            Text("方案")
         }
         HomeSoftOutlinedButton(
             onClick = onSettingsClick,

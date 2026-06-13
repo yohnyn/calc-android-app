@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -48,6 +49,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.personal.futurescalculator.model.MarginMode
 import com.personal.futurescalculator.model.PositionSide
+import com.personal.futurescalculator.util.DecimalFormatters
 import java.math.BigDecimal
 
 @Composable
@@ -131,7 +133,7 @@ private fun SelectorChip(
 ) {
     Surface(
         modifier = modifier
-            .height(32.dp)
+            .height(44.dp)
             .clickable(onClick = onClick),
         shape = MaterialTheme.shapes.small,
         color = if (selected) selectedColor.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f),
@@ -159,15 +161,23 @@ fun LeverageSelector(
     modifier: Modifier = Modifier
 ) {
     val leverageOptions = listOf("1x", "3x", "5x", "10x", "20x", "50x", "100x")
-    val selectedLeverage = leverage.stripTrailingZeros().toPlainString() + "x"
+    val selectedLeverage = DecimalFormatters.formatLeverage(leverage) + "x"
     val selectedIsPreset = selectedLeverage in leverageOptions
     var expanded by remember { mutableStateOf(false) }
     var showCustomDialog by remember { mutableStateOf(false) }
-    var customText by remember { mutableStateOf(leverage.stripTrailingZeros().toPlainString()) }
+    var customText by remember { mutableStateOf(DecimalFormatters.formatLeverage(leverage)) }
+    val customLeverage = runCatching { BigDecimal(customText.trim()) }.getOrNull()
+    val customError = when {
+        customText.isBlank() -> null
+        customLeverage == null -> "请输入有效数字"
+        customLeverage.stripTrailingZeros().scale() > 0 -> "请输入整数杠杆"
+        customLeverage < BigDecimal.ONE || customLeverage > BigDecimal("125") -> "杠杆范围为 1x - 125x"
+        else -> null
+    }
 
     LaunchedEffect(leverage) {
         if (!showCustomDialog) {
-            customText = leverage.stripTrailingZeros().toPlainString()
+            customText = DecimalFormatters.formatLeverage(leverage)
         }
     }
 
@@ -181,24 +191,28 @@ fun LeverageSelector(
                     onValueChange = { customText = it },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("杠杆") },
-                    singleLine = true
+                    singleLine = true,
+                    isError = customError != null,
+                    supportingText = customError?.let { message -> { Text(message) } }
                 )
             },
             confirmButton = {
-                androidx.compose.material3.TextButton(onClick = {
-                    val parsed = runCatching { BigDecimal(customText.trim()) }.getOrNull()
-                    if (parsed != null && parsed >= BigDecimal.ONE && parsed <= BigDecimal("125")) {
-                        onLeverageChange(parsed)
+                androidx.compose.material3.TextButton(
+                    enabled = customLeverage != null && customError == null,
+                    onClick = {
+                        if (customLeverage != null) {
+                            onLeverageChange(customLeverage)
+                        }
                         showCustomDialog = false
                     }
-                }) {
+                ) {
                     Text("确认", fontWeight = FontWeight.SemiBold)
                 }
             },
             dismissButton = {
                 androidx.compose.material3.TextButton(onClick = {
                     showCustomDialog = false
-                    customText = leverage.stripTrailingZeros().toPlainString()
+                    customText = DecimalFormatters.formatLeverage(leverage)
                 }) {
                     Text("取消", fontWeight = FontWeight.SemiBold)
                 }
@@ -217,7 +231,7 @@ fun LeverageSelector(
         )
         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
             Surface(
-                modifier = Modifier.fillMaxWidth().height(40.dp).clickable { expanded = true },
+                modifier = Modifier.fillMaxWidth().height(44.dp).clickable { expanded = true },
                 shape = MaterialTheme.shapes.small,
                 color = MaterialTheme.colorScheme.surface,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
@@ -228,7 +242,7 @@ fun LeverageSelector(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (selectedIsPreset) selectedLeverage else "${leverage.stripTrailingZeros().toPlainString()}x",
+                        text = if (selectedIsPreset) selectedLeverage else "${DecimalFormatters.formatLeverage(leverage)}x",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -256,7 +270,7 @@ fun LeverageSelector(
                     onClick = {
                         expanded = false
                         showCustomDialog = true
-                        customText = leverage.stripTrailingZeros().toPlainString()
+                        customText = DecimalFormatters.formatLeverage(leverage)
                     },
                     contentPadding = AppDropdownMenuItemPadding
                 )
@@ -330,10 +344,19 @@ fun NumberInput(
     modifier: Modifier = Modifier,
     readOnly: Boolean = false,
     onReadOnlyTap: () -> Unit = {},
-    onSubmit: (() -> Unit)? = null
+    onSubmit: (() -> Unit)? = null,
+    requirePositive: Boolean = false,
+    maxDecimalPlaces: Int? = null
 ) {
     val textValue = value?.stripTrailingZeros()?.toPlainString() ?: ""
     var textFieldValue by remember(label) { mutableStateOf(TextFieldValue(textValue)) }
+    val parsedTextValue = runCatching { BigDecimal(textFieldValue.text) }.getOrNull()
+    val inputError = when {
+        textFieldValue.text.isBlank() -> null
+        parsedTextValue == null -> "请输入有效数字"
+        requirePositive && parsedTextValue <= BigDecimal.ZERO -> "请输入大于 0 的数字"
+        else -> null
+    }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val finishInput = {
@@ -373,6 +396,10 @@ fun NumberInput(
                 }
 
                 val normalizedText = it.text.trim()
+                val candidate = runCatching { BigDecimal(normalizedText) }.getOrNull()
+                if (candidate != null && maxDecimalPlaces != null && candidate.scale() > maxDecimalPlaces) {
+                    return@BasicTextField
+                }
                 textFieldValue = it.copy(text = normalizedText)
                 if (normalizedText.isEmpty()) {
                     onValueChange(null)
@@ -397,17 +424,21 @@ fun NumberInput(
             keyboardActions = KeyboardActions(onDone = { finishInput() }),
             singleLine = true,
             textStyle = MaterialTheme.typography.titleMedium.copy(
-                color = MaterialTheme.colorScheme.onSurface,
+                color = if (inputError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.SemiBold
             ),
             decorationBox = { innerTextField ->
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(40.dp),
+                        .height(44.dp),
                     shape = MaterialTheme.shapes.small,
                     color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f))
+                    border = BorderStroke(
+                        1.dp,
+                        if (inputError != null) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
+                    )
                 ) {
                     Box(
                         modifier = Modifier.padding(horizontal = 10.dp),
@@ -418,6 +449,13 @@ fun NumberInput(
                 }
             }
         )
+        if (inputError != null) {
+            Text(
+                text = inputError,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
     }
 }
 
@@ -459,7 +497,7 @@ fun CompactTextInput(
             ),
             decorationBox = { innerTextField ->
                 Surface(
-                    modifier = Modifier.fillMaxWidth().height(40.dp),
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
                     shape = MaterialTheme.shapes.small,
                     color = MaterialTheme.colorScheme.surface,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f))

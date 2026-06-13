@@ -29,6 +29,8 @@ import com.personal.futurescalculator.model.SettlementMode
 import com.personal.futurescalculator.model.SavedPlan
 import com.personal.futurescalculator.model.ThemeMode
 import com.personal.futurescalculator.model.HistoryRecord
+import com.personal.futurescalculator.model.dedupeFingerprint
+import com.personal.futurescalculator.model.contentFingerprint
 import com.personal.futurescalculator.model.HistoryCategory
 import com.personal.futurescalculator.model.MarginMode
 import com.personal.futurescalculator.model.MaxOpenResult
@@ -272,10 +274,18 @@ class CalculatorViewModel(context: Context) : ViewModel() {
         _uiState.value = _uiState.value.copy(showCoinMarginedModeDialog = false)
     }
 
-    fun saveHistoryRecord(record: HistoryRecord) {
+    fun saveHistoryRecord(record: HistoryRecord): Boolean {
+        if (_uiState.value.historyRecords.any {
+                it.dedupeFingerprint() == record.dedupeFingerprint() ||
+                    (it.fingerprint == null && it.contentFingerprint() == record.contentFingerprint())
+            }
+        ) {
+            return false
+        }
         val updated = listOf(record) + _uiState.value.historyRecords
         historyRepository.save(updated)
         _uiState.value = _uiState.value.copy(historyRecords = updated)
+        return true
     }
 
     fun toggleHistoryFavorite(id: String) {

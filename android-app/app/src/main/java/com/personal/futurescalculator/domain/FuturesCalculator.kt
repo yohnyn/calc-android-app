@@ -17,7 +17,8 @@ class FuturesCalculator {
             totalFunds <= BigDecimal.ZERO ||
             entryPrice <= BigDecimal.ZERO ||
             input.leverage < BigDecimal.ONE ||
-            input.leverage > BigDecimal("125")
+            input.leverage > BigDecimal("125") ||
+            input.leverage.stripTrailingZeros().scale() > 0
         ) {
             return null
         }
@@ -129,7 +130,11 @@ class FuturesCalculator {
 
     private fun isValidInput(input: CalculationInput): Boolean {
         // 杠杆必须大于等于1
-        if (input.leverage < BigDecimal.ONE || input.leverage > BigDecimal("125")) {
+        if (
+            input.leverage < BigDecimal.ONE ||
+            input.leverage > BigDecimal("125") ||
+            input.leverage.stripTrailingZeros().scale() > 0
+        ) {
             return false
         }
         
